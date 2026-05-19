@@ -90,7 +90,7 @@ class JsonFormatter(logging.Formatter):
 
 
 def configure_logging(level: str | int | None = None) -> None:
-    resolved_level = level or os.getenv("LOG_LEVEL", "INFO")
+    resolved_level: str | int = level if level is not None else os.getenv("LOG_LEVEL", "INFO")
     root = logging.getLogger()
     root.setLevel(resolved_level)
 

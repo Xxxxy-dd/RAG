@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 from typing import Any, Protocol
 import time
 
+from ..memory.redis_memory import get_redis_client
+
 
 class _KVStoreProtocol(Protocol):
     def get(self, key: str) -> Any: ...
@@ -18,8 +20,6 @@ class _KVStoreProtocol(Protocol):
     def expire(self, key: str, ttl: int) -> Any: ...
 
     def delete(self, key: str) -> Any: ...
-
-from ..memory.redis_memory import get_redis_client
 
 
 def _safe_json(data: dict[str, Any]) -> str:

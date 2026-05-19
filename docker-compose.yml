@@ -41,7 +41,8 @@ services:
         TORCH_INDEX_URL: ${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cpu}
     restart: unless-stopped
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       PYTHONPATH: /app
       REDIS_URL: redis://redis:6379/0
@@ -82,7 +83,8 @@ services:
         TORCH_INDEX_URL: ${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cpu}
     restart: unless-stopped
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       PYTHONPATH: /app
       REDIS_URL: redis://redis:6379/0
@@ -112,7 +114,8 @@ services:
         TORCH_INDEX_URL: ${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cpu}
     restart: unless-stopped
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       PYTHONPATH: /app
       REDIS_URL: redis://redis:6379/0

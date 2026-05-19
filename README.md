@@ -1,335 +1,192 @@
-# RAG 工程化知识库问答项目
+# RAG Knowledge Base QA
 
-本项目是一个可运行的 RAG（检索增强生成）示例，包含以下能力：
+A full-stack Retrieval-Augmented Generation project with document ingestion, semantic retrieval, asynchronous indexing, durable chat history, and Docker-based deployment.
 
-- 前端提问与结果展示
-- 后端检索与生成接口
-- 文档索引（同步/异步）
-- 问答与索引元数据持久化
-- Docker Compose 一键启动
+This repository is designed as a practical engineering project rather than a minimal demo. It shows how to connect a FastAPI backend, React frontend, Chroma vector storage, Redis Streams, MySQL persistence, background workers, Alembic migrations, and CI quality gates into one coherent system.
 
-本文档按前端到后端的顺序说明：作用、操作方法、验证方式。
+## Features
 
-## 1. 系统总览（前端 -> 后端 -> Worker -> 存储）
+- Ask questions against an indexed knowledge base.
+- Retrieve and rerank context chunks before calling the LLM.
+- Store short-term session memory and retrieval snapshots in Redis.
+- Persist conversations, messages, documents, and embedding metadata in MySQL.
+- Index documents synchronously or through asynchronous Redis Stream events.
+- Run dedicated workers for QA persistence and vector indexing.
+- Track requests with `trace_id` across API logs, events, workers, and persisted metadata.
+- Run the full stack with Docker Compose.
 
-### 1.1 前端（Vite）
+## Architecture
 
-作用：
-
-- 提供问答页面与交互入口
-- 调用后端 API，展示回答结果
-
-### 1.2 后端（FastAPI）
-
-作用：
-
-- 接收前端问题
-- 执行检索与生成主流程
-- 产生日志、trace_id，并投递异步事件
-
-### 1.3 Worker
-
-作用：
-
-- `persist_worker`：消费 `qa_turn` 事件，持久化 `conversations/messages`
-- `vector_worker`：消费 `index_chunk` 事件，写入向量库并持久化 `documents/embeddings`
-
-### 1.4 存储层
-
-作用：
-
-- Redis：短期上下文、检索快照、Stream 事件队列
-- MySQL：长期业务数据（会话、消息、索引元数据）
-- Chroma：向量存储与语义检索
-
-## 2. 环境准备
-
-### 2.1 基础要求
-
-- Python 3.10+
-- Node.js 18+
-- Docker（可选，推荐）
-
-### 2.2 安装依赖
-
-```bash
-pip install -r requirements.txt
+```mermaid
+flowchart LR
+    UI[Frontend] --> API[FastAPI backend]
+    API --> Redis[(Redis)]
+    API --> Chroma[(Chroma)]
+    API --> LLM[LLM provider]
+    API --> QAStream[qa_turn stream]
+    QAStream --> PersistWorker[persist_worker]
+    PersistWorker --> MySQL[(MySQL)]
+    Indexer[Document indexing] --> IndexStream[index_chunk stream]
+    IndexStream --> VectorWorker[vector_worker]
+    VectorWorker --> Chroma
+    VectorWorker --> MySQL
 ```
 
-前端依赖：
+More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
-```bash
-cd frontend
-npm install
-cd ..
-```
+Resume-oriented summary: [docs/PROJECT_HIGHLIGHTS.md](docs/PROJECT_HIGHLIGHTS.md)
 
-## 3. 配置说明
+## Tech Stack
 
-### 3.1 环境变量
+| Layer | Technology |
+|---|---|
+| Backend API | FastAPI, Uvicorn, Pydantic |
+| Frontend | React, Vite, Ant Design |
+| Vector store | Chroma, LangChain integration |
+| Queue/cache | Redis, Redis Streams |
+| Durable storage | MySQL, PyMySQL |
+| Migrations | Alembic |
+| Document parsing | PDF, DOCX, PPTX, HTML, Markdown loaders |
+| Quality | Pytest, Ruff, Mypy, GitHub Actions |
+| Deployment | Docker, Docker Compose, Nginx frontend image |
 
-1. 复制示例配置：
+## Quick Start With Docker
 
-```bash
-cp .env.example .env
-```
-
-Windows PowerShell：
+Copy the environment template and fill in provider keys if needed:
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-2. 根据实际环境填写 `.env`。
+Start the production-like stack:
 
-注意：
-
-- `.env` 不应提交到仓库
-- `.env.example` 用于共享配置模板
-
-### 3.2 MySQL 配置方式（二选一）
-
-方式 A：单连接串
-
-```text
-DATABASE_URL=mysql+pymysql://user:password@127.0.0.1:3306/rag?charset=utf8mb4
-```
-
-方式 B：分项配置
-
-```text
-MYSQL_HOST=127.0.0.1
-MYSQL_PORT=3306
-MYSQL_USER=root
-MYSQL_PASSWORD=your_password
-MYSQL_DATABASE=rag
-MYSQL_CHARSET=utf8mb4
-```
-
-## 4. 启动方式（推荐 Docker）
-
-### 4.1 一键启动
-
-作用：
-
-- 同时启动 `redis/mysql/backend/persist_worker/vector_worker/frontend`
-
-操作：
-
-```bash
+```powershell
 docker compose up -d --build
 ```
 
-查看状态：
+Open:
 
-```bash
-docker compose ps
+- Frontend: `http://127.0.0.1`
+- Backend health: `http://127.0.0.1:8000/api/health`
+
+For local development with backend reload and Vite dev server:
+
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 ```
 
-停止服务：
+Development frontend: `http://127.0.0.1:5173`
 
-```bash
-docker compose down
+## Local Development
+
+Install backend dependencies:
+
+```powershell
+pip install -r requirements.txt
 ```
 
-停止并删除卷（会清空数据库与索引卷）：
+Install frontend dependencies:
 
-```bash
-docker compose down -v
+```powershell
+cd frontend
+npm ci
 ```
 
-### 4.2 访问地址
+Run backend:
 
-- 前端：`http://127.0.0.1:5173`
-- 后端健康检查：`http://127.0.0.1:8000/api/health`
+```powershell
+uvicorn rag.main:app --reload --host 127.0.0.1 --port 8000
+```
 
-## 5. 本地开发启动（非 Docker）
+Run frontend:
 
-按前端到后端依赖顺序建议如下。
-
-### 5.1 启动前端
-
-```bash
+```powershell
 cd frontend
 npm run dev
 ```
 
-### 5.2 启动后端
+Run workers:
 
-```bash
-uvicorn rag.main:app --reload --host 127.0.0.1 --port 8000
-```
-
-### 5.3 启动问答持久化 Worker
-
-```bash
+```powershell
 python -m rag.workers.persist_worker
-```
-
-### 5.4 启动向量 Worker
-
-```bash
 python -m rag.workers.vector_worker
 ```
 
-## 6. 索引操作
+## Indexing Documents
 
-统一索引入口：`rag.indexes.index_manager`
-
-### 6.1 同步索引
-
-作用：
-
-- 直接写入 Chroma
-- 同步写入 MySQL 元数据
-- 完成后可立即检索
-
-操作：
-
-```bash
-python -m rag.indexes.index_manager data/samples/基于CNN的论坛验证码识别实验.pptx
-```
-
-多文件：
-
-```bash
-python -m rag.indexes.index_manager data/samples/a.docx data/samples/b.pptx --continue-on-error
-```
-
-### 6.2 异步索引
-
-作用：
-
-- 先入队到 Redis Stream
-- 再由 `vector_worker` 后台处理
-- 适合大批量或慢索引场景
-
-操作：
-
-```bash
-python -m rag.indexes.index_manager --async-index data/samples/基于CNN的论坛验证码识别实验.pptx
-```
-
-多文件：
-
-```bash
-python -m rag.indexes.index_manager --async-index data/samples/a.docx data/samples/b.pptx --continue-on-error
-```
-
-可选的 Stream 配置：
-
-```text
-REDIS_INDEX_EVENTS_STREAM=rag:index-events
-REDIS_INDEX_EVENTS_GROUP=rag-index-workers
-REDIS_INDEX_EVENTS_CONSUMER=index-consumer-1
-```
-
-## 7. 数据流与职责边界
-
-### 7.1 问答链路
-
-1. 前端发起问题
-2. 后端读取短期上下文并执行向量检索
-3. 生成回答并返回前端
-4. 投递 `qa_turn` 事件
-5. `persist_worker` 写入 `conversations/messages`
-
-### 7.2 索引链路
-
-- 同步模式：主流程直接写向量库 + 元数据
-- 异步模式：先入 Stream，再由 `vector_worker` 写向量库 + 元数据
-
-### 7.3 存储职责
-
-- Redis：短期状态 + Stream 事件
-- MySQL：长期业务存档
-- Chroma：检索主库
-
-说明：
-
-- 当前默认不是 FAQ 缓存直出模式
-- 仍是标准 RAG 流程（检索增强生成）
-
-## 8. MySQL 数据表说明
-
-索引与问答链路会使用四张核心表：
-
-- `conversations`：会话级信息
-- `messages`：问答消息
-- `documents`：chunk 原文与文档元数据
-- `embeddings`：向量元数据（`model`、`dimension` 等）
-
-其中：
-
-- `model` 写入真实 embedding 模型名
-- `dimension` 写入实际向量维度
-
-## 9. 数据库迁移（Alembic）
-
-### 9.1 原则
-
-- 生产环境仅通过 Alembic 管理 schema
-- 不在应用启动时自动改表
-
-### 9.2 常用命令
+Synchronous indexing:
 
 ```powershell
-# 升级到最新版本
-alembic upgrade head
-
-# 回滚一个版本
-alembic downgrade -1
+python -m rag.indexes.index_manager data/samples/example.pdf
 ```
 
-本地开发可用辅助脚本（仅开发环境）：
+Asynchronous indexing through Redis Streams:
 
 ```powershell
-python scripts/ensure_schema.py
+python -m rag.indexes.index_manager --async-index data/samples/example.pdf
 ```
 
-## 10. CI 与代码质量
+## API
 
-仓库已配置 GitHub Actions：`.github/workflows/ci.yml`
+Health check:
 
-当前包含：
-
-- `ruff`（风格与静态检查）
-- `mypy`（类型检查）
-- `pytest`（自动化测试）
-- Alembic schema drift 检查
-
-## 11. 常见问题
-
-### 11.1 为什么文档入库后暂时检索不到？
-
-如果使用异步索引，只有 `vector_worker` 消费完成后，文档才会在向量库中可检索。
-
-### 11.2 Redis 的 `XACK` 是否会删除消息？
-
-不会。`XACK` 只确认消费组状态，不删除 Stream 原始条目。
-
-### 11.3 MySQL 是否是主检索库？
-
-不是。主检索在向量库（Chroma）；MySQL 主要用于业务持久化与审计。
-
-## 12. 最短可用命令清单
-
-```bash
-# 1) 启动后端
-uvicorn rag.main:app --reload --host 127.0.0.1 --port 8000
-
-# 2) 启动前端
-cd frontend && npm run dev
-
-# 3) 启动持久化 worker
-python -m rag.workers.persist_worker
-
-# 4) 启动向量 worker
-python -m rag.workers.vector_worker
-
-# 5) 同步建索引
-python -m rag.indexes.index_manager data/samples/基于CNN的论坛验证码识别实验.pptx
-
-# 6) 异步建索引
-python -m rag.indexes.index_manager --async-index data/samples/基于CNN的论坛验证码识别实验.pptx
+```http
+GET /api/health
 ```
+
+Ask a question:
+
+```http
+POST /api/qa
+Content-Type: application/json
+
+{
+  "question": "What does this knowledge base say about the topic?",
+  "session_id": "demo-session",
+  "top_k": 6,
+  "top_n": 4
+}
+```
+
+Load persisted messages:
+
+```http
+GET /api/session/{session_id}/messages
+```
+
+Clear short-term session memory:
+
+```http
+DELETE /api/session/{session_id}
+```
+
+## Quality Checks
+
+```powershell
+ruff check rag tests scripts alembic
+mypy rag tests --ignore-missing-imports
+pytest -q
+cd frontend
+npm run build
+```
+
+The GitHub Actions workflow runs these checks for pull requests and pushes.
+
+After starting the Docker stack, run a local smoke check:
+
+```powershell
+python scripts/smoke_check.py
+```
+
+## Data And Persistence
+
+- Redis stores short-term chat memory, retrieval snapshots, event streams, and worker retry state.
+- Chroma stores vectors for semantic search.
+- MySQL stores durable conversation, message, document, and embedding metadata.
+- Alembic manages schema migrations under `alembic/versions`.
+
+## Notes
+
+- Do not commit `.env` or real API keys.
+- Chroma data and generated logs are intentionally ignored by Git.
+- Docker uses separate frontend development and production image targets.

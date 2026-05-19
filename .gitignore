@@ -23,6 +23,9 @@ dist/
 outputs/
 data/
 rag/indexes/chroma_db/
+*.log
+*.tsbuildinfo
+frontend/dist/
 
 # IDE
 .vscode/
