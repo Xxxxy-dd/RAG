@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 class QARequest(BaseModel):
     question: str = Field(..., description="用户问题")
     history: List[str] | None = Field(default=None, description="对话历史")
-    session_id: str | None = Field(default=None, description="会话 id，用于短期记忆检索")
+    session_id: str | None = Field(default=None, description="会话 ID，用于短期记忆检索")
     top_k: int = Field(default=6, ge=1, le=50, description="检索候选数")
     top_n: int = Field(default=4, ge=1, le=20, description="重排后保留数")
     use_query_rewrite: bool = Field(default=True, description="是否启用查询改写")

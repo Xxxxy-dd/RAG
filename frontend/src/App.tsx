@@ -1,10 +1,37 @@
+import {
+  ClearOutlined,
+  DownloadOutlined,
+  FileMarkdownOutlined,
+  HistoryOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
+  MessageOutlined,
+  PlusOutlined,
+  RobotOutlined,
+  SendOutlined,
+  UserOutlined,
+} from '@ant-design/icons';
+import {
+  Alert,
+  App as AntApp,
+  Button,
+  ConfigProvider,
+  Form,
+  Input,
+  Segmented,
+  Spin,
+  Tag,
+  Tooltip,
+  Typography,
+  message,
+} from 'antd';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, App as AntApp, Button, Card, Col, Collapse, ConfigProvider, Divider, Form, Input, Row, Space, Spin, Switch, Tag, Typography, message } from 'antd';
+
 import { askQuestion, clearSession, getSessionMessages, type SessionMessage } from './api';
 import type { QAResponse } from './types';
 import './styles.css';
 
-const { Title, Paragraph, Text } = Typography;
+const { Paragraph, Text, Title } = Typography;
 
 const SESSION_SUMMARIES_STORAGE_KEY = 'rag_session_summaries';
 const ACTIVE_SESSION_STORAGE_KEY = 'rag_session_id';
@@ -26,7 +53,9 @@ function formatSessionTimestamp(date: Date): string {
 function createSessionId(): string {
   const prefix = `sess-${formatSessionTimestamp(new Date())}`;
   const suffix = window.crypto?.getRandomValues
-    ? Array.from(window.crypto.getRandomValues(new Uint8Array(3)), (value) => value.toString(16).padStart(2, '0')).join('')
+    ? Array.from(window.crypto.getRandomValues(new Uint8Array(3)), (value) =>
+        value.toString(16).padStart(2, '0'),
+      ).join('')
     : Math.random().toString(16).slice(2, 8);
   return `${prefix}-${suffix}`;
 }
@@ -46,11 +75,26 @@ function getInitialSidebarCollapsed(): boolean {
 function shorten(text: string, maxLength: number): string {
   const normalized = text.replace(/\s+/g, ' ').trim();
   if (!normalized) return '';
-  return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 1)}…` : normalized;
+  return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 1)}...` : normalized;
 }
 
 function compareSessionSummaries(a: SessionSummary, b: SessionSummary): number {
-  return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime() || b.turn_count - a.turn_count || a.title.localeCompare(b.title, 'zh-Hans-CN');
+  return (
+    new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime() ||
+    b.turn_count - a.turn_count ||
+    a.title.localeCompare(b.title, 'zh-Hans-CN')
+  );
+}
+
+function normalizeSummary(item: Partial<SessionSummary>): SessionSummary | null {
+  if (!item || typeof item.session_id !== 'string') return null;
+  return {
+    session_id: item.session_id,
+    title: typeof item.title === 'string' && item.title.trim() ? item.title : '新对话',
+    preview: typeof item.preview === 'string' ? item.preview : '',
+    updated_at: typeof item.updated_at === 'string' ? item.updated_at : new Date().toISOString(),
+    turn_count: typeof item.turn_count === 'number' ? item.turn_count : 0,
+  };
 }
 
 function readSessionSummaries(): SessionSummary[] {
@@ -60,14 +104,8 @@ function readSessionSummaries(): SessionSummary[] {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     return parsed
-      .filter((item): item is SessionSummary => item && typeof item.session_id === 'string')
-      .map((item) => ({
-        session_id: item.session_id,
-        title: typeof item.title === 'string' && item.title.trim() ? item.title : '新对话',
-        preview: typeof item.preview === 'string' ? item.preview : '',
-        updated_at: typeof item.updated_at === 'string' ? item.updated_at : new Date().toISOString(),
-        turn_count: typeof item.turn_count === 'number' ? item.turn_count : 0,
-      }))
+      .map((item) => normalizeSummary(item))
+      .filter((item): item is SessionSummary => item !== null)
       .sort(compareSessionSummaries);
   } catch {
     return [];
@@ -85,18 +123,16 @@ function summarizeSession(
   fallbackTitle: string,
   fallbackPreview: string,
 ): SessionSummary {
-  const userMessages = messages.filter((message) => message.role === 'user');
-  const assistantMessages = messages.filter((message) => message.role === 'assistant');
+  const userMessages = messages.filter((item) => item.role === 'user');
+  const assistantMessages = messages.filter((item) => item.role === 'assistant');
   const firstUserMessage = userMessages[0]?.text || '';
   const lastUserMessage = userMessages[userMessages.length - 1]?.text || '';
   const lastAssistantMessage = assistantMessages[assistantMessages.length - 1]?.text || '';
-  const titleSource = firstUserMessage || existing?.title || fallbackTitle;
-  const previewSource = lastAssistantMessage || lastUserMessage || existing?.preview || fallbackPreview;
 
   return {
     session_id: sessionId,
-    title: shorten(titleSource, 28),
-    preview: shorten(previewSource, 48),
+    title: shorten(firstUserMessage || existing?.title || fallbackTitle, 30),
+    preview: shorten(lastAssistantMessage || lastUserMessage || existing?.preview || fallbackPreview, 56),
     updated_at: new Date().toISOString(),
     turn_count: userMessages.length,
   };
@@ -113,6 +149,17 @@ function formatSessionTime(value: string): string {
   }).format(date);
 }
 
+function downloadBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
 export default function App() {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
@@ -123,6 +170,7 @@ export default function App() {
   const [sessionMessages, setSessionMessages] = useState<SessionMessage[]>([]);
   const [sessionSummaries, setSessionSummaries] = useState<SessionSummary[]>(() => readSessionSummaries());
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => getInitialSidebarCollapsed());
+  const [exportFormat, setExportFormat] = useState<'json' | 'md'>('md');
   const feedEndRef = useRef<HTMLDivElement | null>(null);
 
   const activeSessionSummary = useMemo(
@@ -131,26 +179,19 @@ export default function App() {
   );
 
   const orderedSessions = useMemo(() => [...sessionSummaries].sort(compareSessionSummaries), [sessionSummaries]);
-  const activeSessionItems = useMemo(
-    () => orderedSessions.filter((item) => item.session_id === sessionId),
-    [orderedSessions, sessionId],
-  );
-  const recentSessionItems = useMemo(
-    () => orderedSessions.filter((item) => item.session_id !== sessionId),
-    [orderedSessions, sessionId],
-  );
+  const visibleMessages = sessionMessages.filter((item) => item.role === 'user' || item.role === 'assistant');
 
   useEffect(() => {
     window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(sidebarCollapsed));
   }, [sidebarCollapsed]);
 
-  function ensureSummaryExists(sessionIdentifier: string, fallbackTitle = '新对话', fallbackPreview = '等待你输入第一条问题'): void {
+  function ensureSummaryExists(sessionIdentifier: string, fallbackTitle = '新对话', fallbackPreview = '等待输入第一条问题'): void {
     setSessionSummaries((current) => {
-      if (current.some((item) => item.session_id === sessionIdentifier)) {
-        return current;
-      }
-      const next = summarizeSession(sessionIdentifier, [], null, fallbackTitle, fallbackPreview);
-      const updated = [...current, next].sort(compareSessionSummaries);
+      if (current.some((item) => item.session_id === sessionIdentifier)) return current;
+      const updated = [
+        ...current,
+        summarizeSession(sessionIdentifier, [], null, fallbackTitle, fallbackPreview),
+      ].sort(compareSessionSummaries);
       writeSessionSummaries(updated);
       return updated;
     });
@@ -160,12 +201,14 @@ export default function App() {
     sessionIdentifier: string,
     messages: SessionMessage[],
     fallbackTitle = '新对话',
-    fallbackPreview = '等待你输入第一条问题',
+    fallbackPreview = '等待输入第一条问题',
   ): void {
     setSessionSummaries((current) => {
       const existing = current.find((item) => item.session_id === sessionIdentifier) ?? null;
       const next = summarizeSession(sessionIdentifier, messages, existing, fallbackTitle, fallbackPreview);
-      const updated = [...current.filter((item) => item.session_id !== sessionIdentifier), next].sort(compareSessionSummaries);
+      const updated = [...current.filter((item) => item.session_id !== sessionIdentifier), next].sort(
+        compareSessionSummaries,
+      );
       writeSessionSummaries(updated);
       return updated;
     });
@@ -185,13 +228,13 @@ export default function App() {
 
     try {
       setLoadingHistory(true);
-      const data = await getSessionMessages(nextSessionId, 20);
+      const data = await getSessionMessages(nextSessionId, 40);
       setSessionMessages(data.messages);
       updateSummaryFromMessages(
         nextSessionId,
         data.messages,
         options?.fallbackTitle ?? '新对话',
-        options?.fallbackPreview ?? '等待你输入第一条问题',
+        options?.fallbackPreview ?? '等待输入第一条问题',
       );
     } catch (err) {
       setSessionMessages([]);
@@ -201,23 +244,15 @@ export default function App() {
     }
   }
 
-  function regenerateSessionId() {
+  function startNewConversation() {
     const nextSessionId = createSessionId();
     window.localStorage.setItem(ACTIVE_SESSION_STORAGE_KEY, nextSessionId);
     setSessionId(nextSessionId);
     setSessionMessages([]);
     setResult(null);
     setError(null);
-    ensureSummaryExists(nextSessionId, '新对话', '等待你输入第一条问题');
-  }
-
-  function startNewConversation() {
-    regenerateSessionId();
     form.setFieldsValue({ question: '' });
-  }
-
-  function toggleSidebar() {
-    setSidebarCollapsed((current) => !current);
+    ensureSummaryExists(nextSessionId);
   }
 
   async function onClearSession() {
@@ -225,12 +260,12 @@ export default function App() {
     try {
       setLoading(true);
       await clearSession(sessionId);
-      message.success('已清空会话短期记忆');
+      message.success('已清空当前会话');
       setSessionMessages([]);
       setResult(null);
       await loadSessionHistory(sessionId, {
         fallbackTitle: activeSessionSummary?.title || '新对话',
-        fallbackPreview: '已清空会话',
+        fallbackPreview: '当前会话已清空',
       });
     } catch (err) {
       message.error(err instanceof Error ? err.message : '清空会话失败');
@@ -239,35 +274,47 @@ export default function App() {
     }
   }
 
+  async function exportSession() {
+    try {
+      setLoadingHistory(true);
+      const data = await getSessionMessages(sessionId, 200);
+      if (exportFormat === 'json') {
+        downloadBlob(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }), `${sessionId}.json`);
+        return;
+      }
+
+      const lines: string[] = [`# ${activeSessionSummary?.title || data.session_id}`, ''];
+      for (const item of data.messages) {
+        lines.push(`## ${item.role} #${item.seq}`);
+        lines.push('');
+        lines.push(item.text || '');
+        lines.push('');
+      }
+      downloadBlob(new Blob([lines.join('\n')], { type: 'text/markdown' }), `${sessionId}.md`);
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '导出失败');
+    } finally {
+      setLoadingHistory(false);
+    }
+  }
+
   useEffect(() => {
     form.setFieldsValue({
-      top_k: 6,
-      top_n: 4,
-      use_query_rewrite: true,
-      collection_name: 'document_indexing',
-      persist_directory: '',
+      question: '',
     });
   }, [form]);
 
   useEffect(() => {
     const storedSummaries = readSessionSummaries();
-    if (storedSummaries.length > 0) {
-      const merged = storedSummaries.some((item) => item.session_id === sessionId)
-        ? storedSummaries
-        : [...storedSummaries, summarizeSession(sessionId, [], null, '新对话', '等待你输入第一条问题')];
-      const sorted = [...merged].sort(compareSessionSummaries);
-      writeSessionSummaries(sorted);
-      setSessionSummaries(sorted);
-    } else {
-      const initial = summarizeSession(sessionId, [], null, '新对话', '等待你输入第一条问题');
-      writeSessionSummaries([initial]);
-      setSessionSummaries([initial]);
-    }
+    const hasSession = storedSummaries.some((item) => item.session_id === sessionId);
+    const summaries = hasSession
+      ? storedSummaries
+      : [...storedSummaries, summarizeSession(sessionId, [], null, '新对话', '等待输入第一条问题')];
+    const sorted = summaries.sort(compareSessionSummaries);
+    writeSessionSummaries(sorted);
+    setSessionSummaries(sorted);
 
-    void loadSessionHistory(sessionId, {
-      fallbackTitle: '新对话',
-      fallbackPreview: '等待你输入第一条问题',
-    });
+    void loadSessionHistory(sessionId);
   }, [sessionId]);
 
   useEffect(() => {
@@ -275,23 +322,21 @@ export default function App() {
   }, [sessionMessages, result, loadingHistory, loading]);
 
   async function onFinish(values: Record<string, unknown>) {
+    const question = String(values.question || '').trim();
+    if (!question) return;
+
     setLoading(true);
     setError(null);
     try {
       const payload = {
-        question: String(values.question || '').trim(),
+        question,
         session_id: sessionId,
-        top_k: Number(values.top_k || 6),
-        top_n: Number(values.top_n || 4),
-        use_query_rewrite: Boolean(values.use_query_rewrite),
-        collection_name: String(values.collection_name || 'document_indexing'),
-        persist_directory: values.persist_directory ? String(values.persist_directory) : null,
       };
       const data = await askQuestion(payload);
       setResult(data);
       form.setFieldsValue({ question: '' });
       await loadSessionHistory(payload.session_id, {
-        fallbackTitle: String(values.question || '新对话'),
+        fallbackTitle: question,
         fallbackPreview: data.answer,
       });
     } catch (err) {
@@ -310,190 +355,81 @@ export default function App() {
     setError(null);
   }
 
-  async function exportSession(format: 'json' | 'md') {
-    try {
-      setLoadingHistory(true);
-      const data = await getSessionMessages(sessionId, 200);
-      if (format === 'json') {
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${sessionId}-messages.json`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
-        return;
-      }
-
-      const lines: string[] = [];
-      lines.push(`# Session ${data.session_id}\n`);
-      for (const messageItem of data.messages) {
-        lines.push(`- **${messageItem.role}** #{${messageItem.seq}} _${messageItem.created_at}_`);
-        lines.push('');
-        lines.push(messageItem.text || '');
-        lines.push('');
-      }
-      const blob = new Blob([lines.join('\n')], { type: 'text/markdown' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${sessionId}-messages.md`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : '导出失败');
-    } finally {
-      setLoadingHistory(false);
-    }
-  }
-
-  const visibleMessages = sessionMessages.filter((item) => item.role === 'user' || item.role === 'assistant');
-
   return (
     <ConfigProvider
       theme={{
         token: {
-          colorPrimary: '#10a37f',
-          borderRadius: 18,
-          fontFamily: 'Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+          colorPrimary: '#5f6368',
+          borderRadius: 8,
+          colorBgLayout: '#ffffff',
+          colorBorder: '#e5e5e5',
+          colorText: '#1f1f1f',
+          colorTextSecondary: '#8a8a8a',
+          fontFamily:
+            'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
         },
       }}
     >
       <AntApp>
-        <div className="chat-shell">
-          <aside className={`chat-sidebar ${sidebarCollapsed ? 'chat-sidebar-collapsed' : ''}`}>
-            <div className="sidebar-header">
+        <div className="workspace-shell">
+          <aside className={`workspace-sidebar ${sidebarCollapsed ? 'is-collapsed' : ''}`}>
+            <div className="sidebar-titlebar">
               {!sidebarCollapsed && (
-                <div>
-                  <Title level={4} style={{ margin: 0, color: '#111827' }}>
-                    RAG QA Demo
-                  </Title>
-                  <Paragraph style={{ margin: '6px 0 0', color: '#6b7280' }}>
-                    左侧历史会话，右侧当前对话
-                  </Paragraph>
+                <div className="brand-lockup">
+                  <div className="brand-mark">R</div>
+                  <div>
+                    <Text className="brand-title">知识问答</Text>
+                    <Text className="brand-subtitle">企业知识助手</Text>
+                  </div>
                 </div>
               )}
-
-              <Space direction={sidebarCollapsed ? 'vertical' : 'horizontal'} style={{ width: '100%' }}>
-                <Button type="primary" block onClick={startNewConversation}>
-                  {sidebarCollapsed ? '新' : '新对话'}
-                </Button>
-                <Button block onClick={toggleSidebar}>
-                  {sidebarCollapsed ? '展开' : '收起'}
-                </Button>
-              </Space>
+              <Tooltip title={sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}>
+                <Button
+                  type="text"
+                  icon={sidebarCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+                  onClick={() => setSidebarCollapsed((current) => !current)}
+                />
+              </Tooltip>
             </div>
 
-            <div className={`sidebar-list ${sidebarCollapsed ? 'sidebar-list-collapsed' : ''}`}>
+            <div className="sidebar-actions">
+              <Tooltip title="新对话">
+                <Button type="primary" icon={<PlusOutlined />} block={!sidebarCollapsed} onClick={startNewConversation}>
+                  {!sidebarCollapsed && '新对话'}
+                </Button>
+              </Tooltip>
+            </div>
+
+            <div className="session-list">
               {!sidebarCollapsed && (
-                <div className="session-section">
-                  <div className="session-section-header">
-                    <span className="section-icon section-icon-active">◎</span>
-                    <Text strong style={{ color: '#111827' }}>
-                      当前会话
-                    </Text>
-                  </div>
-
-                  {activeSessionItems.length === 0 ? (
-                    <div className="sidebar-empty sidebar-empty-compact">
-                      <Title level={5} style={{ color: '#111827', marginTop: 0 }}>
-                        新对话
-                      </Title>
-                      <Paragraph style={{ color: '#6b7280', marginBottom: 0 }}>
-                        当前会话还没有可显示的标题。
-                      </Paragraph>
-                    </div>
-                  ) : (
-                    activeSessionItems.map((item) => (
-                      <button
-                        key={item.session_id}
-                        type="button"
-                        className={`session-card session-card-active ${sessionId === item.session_id ? 'session-card-selected' : ''}`}
-                        onClick={() => handleSwitchSession(item.session_id)}
-                      >
-                        <div className="session-card-top">
-                          <div className="session-card-title-wrap">
-                            <span className="session-card-icon session-card-icon-current">◉</span>
-                            <Text className="session-title">{item.title}</Text>
-                          </div>
-                          <Tag color="green">当前</Tag>
-                        </div>
-                        <Paragraph className="session-preview">{item.preview || '暂无预览'}</Paragraph>
-                        <div className="session-card-meta">
-                          <Text type="secondary">{formatSessionTime(item.updated_at)}</Text>
-                          <Text type="secondary">{item.turn_count} 轮</Text>
-                        </div>
-                      </button>
-                    ))
-                  )}
+                <div className="session-group-label">
+                  <HistoryOutlined />
+                  <span>会话</span>
                 </div>
               )}
 
-              {!sidebarCollapsed && recentSessionItems.length > 0 && (
-                <div className="session-section">
-                  <div className="session-section-header">
-                    <span className="section-icon section-icon-recent">☰</span>
-                    <Text strong style={{ color: '#111827' }}>
-                      最近会话
-                    </Text>
-                  </div>
-                </div>
-              )}
-
-              {sidebarCollapsed ? (
-                orderedSessions.length === 0 ? (
-                  <div className="sidebar-empty sidebar-empty-collapsed" />
-                ) : (
-                  orderedSessions.map((item) => {
-                    const active = item.session_id === sessionId;
-                    return (
-                      <button
-                        key={item.session_id}
-                        type="button"
-                        className={`session-card ${active ? 'session-card-active' : ''}`}
-                        onClick={() => handleSwitchSession(item.session_id)}
-                      >
-                        <div className="session-card-collapsed-dot" title={item.title}>
-                          <span />
-                        </div>
-                      </button>
-                    );
-                  })
-                )
-              ) : recentSessionItems.length === 0 ? (
-                <div className="sidebar-empty">
-                  <Title level={5} style={{ color: '#111827', marginTop: 0 }}>
-                    还没有历史会话
-                  </Title>
-                  <Paragraph style={{ color: '#6b7280', marginBottom: 0 }}>
-                    你发送第一条问题后，会在这里自动生成历史记录。
-                  </Paragraph>
-                </div>
+              {orderedSessions.length === 0 ? (
+                <div className="empty-sidebar">暂无会话</div>
               ) : (
-                recentSessionItems.map((item) => {
+                orderedSessions.map((item) => {
+                  const active = item.session_id === sessionId;
                   return (
                     <button
                       key={item.session_id}
                       type="button"
-                      className="session-card"
+                      className={`session-item ${active ? 'is-active' : ''}`}
                       onClick={() => handleSwitchSession(item.session_id)}
                     >
-                      <div className="session-card-top">
-                        <div className="session-card-title-wrap">
-                          <span className="session-card-icon">◔</span>
-                          <Text className="session-title">{item.title}</Text>
-                        </div>
-                        <Tag color="default">历史</Tag>
-                      </div>
-                      <Paragraph className="session-preview">{item.preview || '暂无预览'}</Paragraph>
-                      <div className="session-card-meta">
-                        <Text type="secondary">{formatSessionTime(item.updated_at)}</Text>
-                        <Text type="secondary">{item.turn_count} 轮</Text>
-                      </div>
+                      <MessageOutlined className="session-item-icon" />
+                      {!sidebarCollapsed && (
+                        <span className="session-item-body">
+                          <span className="session-item-title">{item.title}</span>
+                          <span className="session-item-preview">{item.preview || '暂无预览'}</span>
+                          <span className="session-item-meta">
+                            {formatSessionTime(item.updated_at)} · {item.turn_count} 轮
+                          </span>
+                        </span>
+                      )}
                     </button>
                   );
                 })
@@ -501,211 +437,157 @@ export default function App() {
             </div>
           </aside>
 
-          <main className="chat-main">
-            <header className="chat-topbar">
-              <div>
-                <Title level={3} style={{ margin: 0, color: '#111827' }}>
-                  {activeSessionSummary?.title || '新对话'}
-                </Title>
-                <Space size={8} wrap style={{ marginTop: 10 }}>
-                  <Tag color="default">session: {sessionId.slice(0, 8)}</Tag>
-                  <Tag color="default">{activeSessionSummary?.turn_count ?? 0} 轮</Tag>
-                  <Tag color="default">{sessionMessages.length} 条消息</Tag>
-                </Space>
+          <main className="workspace-main">
+            <header className="thread-header">
+              <div className="thread-heading">
+                <Title level={4}>{activeSessionSummary?.title || '新对话'}</Title>
+                <div className="thread-meta">
+                  <Tag>{activeSessionSummary?.turn_count ?? 0} 轮</Tag>
+                  <Tag>{sessionMessages.length} 条消息</Tag>
+                </div>
               </div>
 
-              <Space wrap>
-                <Button onClick={() => exportSession('json')} loading={loadingHistory}>
-                  导出 JSON
-                </Button>
-                <Button onClick={() => exportSession('md')} loading={loadingHistory}>
-                  导出 Markdown
-                </Button>
-                <Button danger onClick={onClearSession} loading={loading}>
-                  清空会话
-                </Button>
-              </Space>
+              <div className="thread-tools">
+                <Segmented
+                  size="small"
+                  value={exportFormat}
+                  onChange={(value) => setExportFormat(value as 'json' | 'md')}
+                  options={[
+                    { label: 'MD', value: 'md' },
+                    { label: 'JSON', value: 'json' },
+                  ]}
+                />
+                <Tooltip title="导出会话">
+                  <Button
+                    icon={exportFormat === 'md' ? <FileMarkdownOutlined /> : <DownloadOutlined />}
+                    onClick={exportSession}
+                    loading={loadingHistory}
+                  />
+                </Tooltip>
+                <Tooltip title="清空当前会话">
+                  <Button danger icon={<ClearOutlined />} onClick={onClearSession} loading={loading} />
+                </Tooltip>
+              </div>
             </header>
 
-            <section className="chat-stream">
-              <div className="chat-feed">
+            <section className="thread-scroll">
+              <div className="thread-feed">
                 {loadingHistory ? (
-                  <div className="loading-box chat-loading">
-                    <Spin size="large" />
-                    <Text>正在加载当前会话历史...</Text>
+                  <div className="state-panel">
+                    <Spin />
+                    <Text type="secondary">正在加载会话历史</Text>
                   </div>
                 ) : visibleMessages.length === 0 ? (
-                  <div className="empty-state chat-empty">
-                    <Title level={4} style={{ color: '#111827', marginTop: 0 }}>
-                      准备开始
-                    </Title>
-                    <Paragraph style={{ color: '#6b7280', marginBottom: 0 }}>
-                      这里会显示你和模型的完整对话记录。你可以在底部输入问题，右侧会像大语言模型网页一样持续展开消息。
-                    </Paragraph>
+                  <div className="welcome-panel">
+                    <RobotOutlined />
+                    <Title level={3}>今天想了解什么？</Title>
+                    <Paragraph>直接提问，我会基于已接入的知识库给出清晰回答，并在需要时附上参考内容。</Paragraph>
                   </div>
                 ) : (
                   visibleMessages.map((item) => {
                     const isUser = item.role === 'user';
                     return (
-                      <div key={item.message_id} className={`message-row ${isUser ? 'message-row-user' : 'message-row-assistant'}`}>
-                        {!isUser && <div className="message-avatar assistant-avatar">AI</div>}
-                        <div className={`message-bubble ${isUser ? 'message-bubble-user' : 'message-bubble-assistant'}`}>
-                          <div className="message-meta">
-                            <span className={`message-role-chip ${isUser ? 'message-role-chip-user' : 'message-role-chip-assistant'}`}>
-                              {isUser ? '你' : '助手'}
-                            </span>
-                            <Text type="secondary" style={{ marginLeft: 8 }}>
-                              #{item.seq}
-                            </Text>
-                            <Text type="secondary" style={{ marginLeft: 8 }}>
-                              {item.created_at}
-                            </Text>
+                      <article key={item.message_id} className={`message ${isUser ? 'from-user' : 'from-assistant'}`}>
+                        <div className="message-avatar">{isUser ? <UserOutlined /> : <RobotOutlined />}</div>
+                        <div className="message-content">
+                          <div className="message-topline">
+                            <Text strong>{isUser ? '你' : '助手'}</Text>
+                            <Text type="secondary">#{item.seq}</Text>
+                            <Text type="secondary">{item.created_at}</Text>
                           </div>
-                          <Paragraph style={{ marginBottom: 0, whiteSpace: 'pre-wrap' }}>{item.text}</Paragraph>
+                          <Paragraph>{item.text}</Paragraph>
                         </div>
-                        {isUser && <div className="message-avatar user-avatar">我</div>}
-                      </div>
+                      </article>
                     );
                   })
                 )}
 
                 {loading && (
-                  <div className="message-row message-row-assistant typing-row">
-                    <div className="message-avatar assistant-avatar">AI</div>
-                    <div className="message-bubble message-bubble-assistant typing-bubble">
-                      <div className="message-meta">
-                        <span className="message-role-chip message-role-chip-assistant">助手</span>
-                        <Text type="secondary" style={{ marginLeft: 8 }}>
-                          正在生成
-                        </Text>
-                      </div>
-                      <div className="typing-dots" aria-label="正在生成回答">
-                        <span />
-                        <span />
-                        <span />
-                      </div>
-                      <Text type="secondary" style={{ display: 'block', marginTop: 10 }}>
-                        正在检索知识库并组织回答...
-                      </Text>
+                  <article className="message from-assistant">
+                    <div className="message-avatar">
+                      <RobotOutlined />
                     </div>
-                  </div>
+                    <div className="message-content is-thinking">
+                      <div className="message-topline">
+                        <Text strong>助手</Text>
+                        <Text type="secondary">正在生成</Text>
+                      </div>
+                      <div className="typing-indicator">
+                        <span />
+                        <span />
+                        <span />
+                      </div>
+                    </div>
+                  </article>
                 )}
 
-                {error && <Alert className="result-alert" type="error" showIcon message="请求失败" description={error} />}
+                {error && <Alert type="error" showIcon message="请求失败" description={error} />}
 
                 {result && (
-                  <Card className="result-insight-card" bordered={false}>
-                    <Title level={5} style={{ marginTop: 0 }}>
-                      本次回答详情
-                    </Title>
-                    <Card size="small" className="insight-block">
-                      <Text strong>原始问题：</Text>
-                      <Paragraph style={{ marginTop: 8, marginBottom: 0, whiteSpace: 'pre-wrap' }}>{result.question}</Paragraph>
-                      <Divider style={{ margin: '14px 0' }} />
-                      <Text strong>改写查询：</Text>
-                      <Paragraph style={{ marginTop: 8, marginBottom: 0, whiteSpace: 'pre-wrap' }}>{result.rewritten_question}</Paragraph>
-                    </Card>
-
-                    <Card size="small" className="insight-block" style={{ marginTop: 16 }}>
-                      <Text strong>回答：</Text>
-                      <Paragraph style={{ marginTop: 8, marginBottom: 0, whiteSpace: 'pre-wrap' }}>{result.answer}</Paragraph>
-                    </Card>
-
-                    <Card size="small" className="insight-block" style={{ marginTop: 16 }}>
-                      <Text strong>引用上下文：</Text>
-                      <div style={{ marginTop: 12 }}>
-                        {result.contexts.length === 0 ? (
-                          <Paragraph type="secondary" style={{ marginBottom: 0 }}>
-                            没有返回上下文。
-                          </Paragraph>
-                        ) : (
-                          result.contexts.map((item) => (
-                            <Card key={item.index} size="small" style={{ marginBottom: 12 }}>
-                              <Space direction="vertical" size={4} style={{ width: '100%' }}>
-                                <Text strong>片段 {item.index}</Text>
-                                <Text type="secondary">{item.title_path || 'ROOT'}</Text>
-                                <Text type="secondary">来源：{item.source || 'unknown'}</Text>
-                                <Text type="secondary">
-                                  retrieval: {item.retrieval_score ?? '-'} | rerank: {item.rerank_score ?? '-'}
-                                </Text>
-                                <Paragraph style={{ marginBottom: 0, whiteSpace: 'pre-wrap' }}>{item.text}</Paragraph>
-                              </Space>
-                            </Card>
-                          ))
-                        )}
+                  <section className="inspector-panel">
+                    <div className="inspector-header">
+                      <Text strong>参考内容</Text>
+                    </div>
+                    <div className="inspector-grid">
+                      <div className="inspector-block">
+                        <Text type="secondary">你的问题</Text>
+                        <Paragraph>{result.question}</Paragraph>
                       </div>
-                    </Card>
-                  </Card>
+                      <div className="inspector-block">
+                        <Text type="secondary">理解后的问题</Text>
+                        <Paragraph>{result.rewritten_question}</Paragraph>
+                      </div>
+                    </div>
+                    <div className="inspector-block">
+                      <Text type="secondary">回答</Text>
+                      <Paragraph>{result.answer}</Paragraph>
+                    </div>
+                    <div className="context-list">
+                      <Text type="secondary">引用上下文</Text>
+                      {result.contexts.length === 0 ? (
+                        <Paragraph type="secondary">没有返回上下文。</Paragraph>
+                      ) : (
+                        result.contexts.map((item) => (
+                          <div key={item.index} className="context-item">
+                            <div className="context-meta">
+                              <Tag>片段 {item.index}</Tag>
+                              <span>{item.title_path || 'ROOT'}</span>
+                              <span>{item.source || 'unknown'}</span>
+                            </div>
+                            <Paragraph>{item.text}</Paragraph>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </section>
                 )}
 
                 <div ref={feedEndRef} />
               </div>
             </section>
 
-            <section className="composer-shell">
-              <div className="composer-inner">
-                <Form form={form} layout="vertical" onFinish={onFinish} initialValues={{ question: '' }}>
-                  <Form.Item name="question" label={null} rules={[{ required: true, message: '请输入问题' }]}>
-                    <Input.TextArea
-                      autoSize={{ minRows: 3, maxRows: 7 }}
-                      placeholder="输入你的问题，按 Ctrl/⌘ + Enter 发送，像大语言模型网页一样开始对话"
-                      onKeyDown={(event) => {
-                        if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
-                          event.preventDefault();
-                          form.submit();
-                        }
-                      }}
-                    />
-                  </Form.Item>
-
-                  <div className="composer-actions">
-                    <Text type="secondary">当前 session：{sessionId.slice(0, 8)}</Text>
-                    <Button type="primary" htmlType="submit" loading={loading} size="large">
-                      发送
-                    </Button>
-                  </div>
-
-                  <Collapse
-                    ghost
-                    className="advanced-collapse"
-                    items={[
-                      {
-                        key: 'advanced',
-                        label: '高级设置',
-                        children: (
-                          <Row gutter={12}>
-                            <Col xs={12} sm={6}>
-                              <Form.Item name="top_k" label="检索候选数">
-                                <Input type="number" min={1} max={50} />
-                              </Form.Item>
-                            </Col>
-                            <Col xs={12} sm={6}>
-                              <Form.Item name="top_n" label="重排保留数">
-                                <Input type="number" min={1} max={20} />
-                              </Form.Item>
-                            </Col>
-                            <Col xs={24} sm={6}>
-                              <Form.Item name="collection_name" label="Chroma 集合名">
-                                <Input />
-                              </Form.Item>
-                            </Col>
-                            <Col xs={24} sm={6}>
-                              <Form.Item name="persist_directory" label="持久化目录">
-                                <Input placeholder="默认使用 rag/indexes/chroma_db" />
-                              </Form.Item>
-                            </Col>
-                            <Col xs={24}>
-                              <Form.Item name="use_query_rewrite" label="启用查询改写" valuePropName="checked">
-                                <Switch />
-                              </Form.Item>
-                            </Col>
-                          </Row>
-                        ),
-                      },
-                    ]}
+            <section className="composer">
+              <Form form={form} layout="vertical" onFinish={onFinish}>
+                <Form.Item name="question" rules={[{ required: true, message: '请输入问题' }]}>
+                  <Input.TextArea
+                    autoSize={{ minRows: 2, maxRows: 7 }}
+                    placeholder="输入你的问题，Ctrl / Command + Enter 发送"
+                    onKeyDown={(event) => {
+                      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+                        event.preventDefault();
+                        form.submit();
+                      }
+                    }}
                   />
-                </Form>
-              </div>
+                </Form.Item>
+
+                <div className="composer-footer">
+                  <Text type="secondary">答案将基于知识库生成</Text>
+                  <Button type="primary" htmlType="submit" icon={<SendOutlined />} loading={loading}>
+                    发送
+                  </Button>
+                </div>
+              </Form>
             </section>
           </main>
         </div>
