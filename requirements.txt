@@ -1,6 +1,7 @@
 chromadb
 langchain-chroma
 langchain
+langchain-community
 langchain-text-splitters
 fastapi
 uvicorn[standard]
@@ -8,6 +9,7 @@ python-docx
 python-pptx
 pypdf
 pdfplumber
+beautifulsoup4
 sentence-transformers
 pdfminer.six
 python-dotenv

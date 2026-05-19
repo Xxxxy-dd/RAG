@@ -1,0 +1,29 @@
+services:
+  backend:
+    command: ["uvicorn", "rag.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    volumes:
+      - chroma_data:/app/rag/indexes/chroma_db
+      - ./:/app
+
+  persist_worker:
+    volumes:
+      - ./:/app
+
+  vector_worker:
+    volumes:
+      - chroma_data:/app/rag/indexes/chroma_db
+      - ./:/app
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      target: dev
+      args:
+        NODE_BASE_IMAGE: ${NODE_BASE_IMAGE:-docker.m.daocloud.io/library/node:20-alpine}
+    environment:
+      VITE_PROXY_TARGET: http://backend:8000
+      VITE_DEV_HOST: 0.0.0.0
+      VITE_DEV_PORT: 5173
+    ports: !override
+      - "5173:5173"

@@ -11,8 +11,13 @@ venv/
 .env
 .git/
 .gitignore
+.github/
 node_modules/
 frontend/node_modules/
+frontend/dist/
+frontend/*.tsbuildinfo
 outputs/
 data/processed/
 rag/indexes/chroma_db/
+docker-compose.log
+pip-install.log

@@ -1,7 +1,6 @@
 services:
   redis:
     image: redis:7-alpine
-    container_name: rag-redis
     restart: unless-stopped
     ports:
       - "6379:6379"
@@ -15,7 +14,6 @@ services:
 
   mysql:
     image: mysql:8.0
-    container_name: rag-mysql
     restart: unless-stopped
     command: ["--default-authentication-plugin=mysql_native_password"]
     environment:
@@ -24,7 +22,7 @@ services:
       MYSQL_USER: rag
       MYSQL_PASSWORD: ragpass
     ports:
-      - "3306:3306"
+      - "3307:3306"
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD"]
       interval: 10s
@@ -34,12 +32,13 @@ services:
       - mysql_data:/var/lib/mysql
 
   backend:
+    image: rag-backend:${IMAGE_TAG:-dev}
     build:
       context: .
       dockerfile: Dockerfile
       args:
         PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-docker.m.daocloud.io/library/python:3.11-slim}
-    container_name: rag-backend
+        TORCH_INDEX_URL: ${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cpu}
     restart: unless-stopped
     env_file:
       - .env
@@ -61,20 +60,26 @@ services:
         condition: service_healthy
       mysql:
         condition: service_healthy
-    command: ["uvicorn", "rag.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    command: ["uvicorn", "rag.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
     ports:
       - "8000:8000"
     volumes:
-      - ./:/app
       - chroma_data:/app/rag/indexes/chroma_db
 
   persist_worker:
+    image: rag-backend:${IMAGE_TAG:-dev}
     build:
       context: .
       dockerfile: Dockerfile
       args:
         PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-docker.m.daocloud.io/library/python:3.11-slim}
-    container_name: rag-persist-worker
+        TORCH_INDEX_URL: ${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cpu}
     restart: unless-stopped
     env_file:
       - .env
@@ -96,16 +101,15 @@ services:
       mysql:
         condition: service_healthy
     command: ["python", "-m", "rag.workers.persist_worker"]
-    volumes:
-      - ./:/app
 
   vector_worker:
+    image: rag-backend:${IMAGE_TAG:-dev}
     build:
       context: .
       dockerfile: Dockerfile
       args:
         PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-docker.m.daocloud.io/library/python:3.11-slim}
-    container_name: rag-vector-worker
+        TORCH_INDEX_URL: ${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cpu}
     restart: unless-stopped
     env_file:
       - .env
@@ -127,29 +131,26 @@ services:
       mysql:
         condition: service_healthy
       backend:
-        condition: service_started
+        condition: service_healthy
     command: ["python", "-m", "rag.workers.vector_worker"]
     volumes:
-      - ./:/app
       - chroma_data:/app/rag/indexes/chroma_db
 
   frontend:
+    image: rag-frontend:${IMAGE_TAG:-dev}
     build:
       context: .
       dockerfile: frontend/Dockerfile
+      target: production
       args:
         NODE_BASE_IMAGE: ${NODE_BASE_IMAGE:-docker.m.daocloud.io/library/node:20-alpine}
-    container_name: rag-frontend
+        NGINX_BASE_IMAGE: ${NGINX_BASE_IMAGE:-docker.m.daocloud.io/library/nginx:1.27-alpine}
     restart: unless-stopped
-    environment:
-      VITE_PROXY_TARGET: http://backend:8000
-      VITE_DEV_HOST: 0.0.0.0
-      VITE_DEV_PORT: 5173
     depends_on:
       backend:
-        condition: service_started
+        condition: service_healthy
     ports:
-      - "5173:5173"
+      - "${FRONTEND_PORT:-80}:80"
 
 volumes:
   redis_data:
