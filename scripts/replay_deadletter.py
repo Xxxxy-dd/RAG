@@ -15,8 +15,15 @@ def _default_source_stream(dlq_stream: str) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Replay dead-letter Redis Stream entries back to the source stream")
-    parser.add_argument("--dlq-stream", default=os.getenv("REDIS_INDEX_EVENTS_DLQ_STREAM") or os.getenv("REDIS_EVENTS_DLQ_STREAM") or "rag:events:dlq")
+    parser = argparse.ArgumentParser(
+        description="Replay dead-letter Redis Stream entries back to the source stream"
+    )
+    parser.add_argument(
+        "--dlq-stream",
+        default=os.getenv("REDIS_INDEX_EVENTS_DLQ_STREAM")
+        or os.getenv("REDIS_EVENTS_DLQ_STREAM")
+        or "rag:events:dlq",
+    )
     parser.add_argument("--source-stream", default=None)
     parser.add_argument("--limit", type=int, default=100)
     args = parser.parse_args(argv)
@@ -45,7 +52,11 @@ def main(argv: list[str] | None = None) -> int:
             original_payload = {}
 
         original_payload["replayed_from_dlq"] = True
-        original_payload["replayed_dlq_entry_id"] = entry_id.decode("utf-8", errors="ignore") if isinstance(entry_id, bytes) else str(entry_id)
+        original_payload["replayed_dlq_entry_id"] = (
+            entry_id.decode("utf-8", errors="ignore")
+            if isinstance(entry_id, bytes)
+            else str(entry_id)
+        )
         client.xadd(source_stream, original_payload)
         replayed += 1
 

@@ -1,6 +1,7 @@
 from langchain_community.embeddings import DashScopeEmbeddings
 from ..config import get_settings
 
+
 def remote_embedder_model():
     settings = get_settings()
     if not settings.embeddings_api_key:

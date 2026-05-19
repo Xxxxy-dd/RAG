@@ -1,6 +1,5 @@
 import json
 from dataclasses import dataclass
-from typing import Any
 from urllib import error, request
 
 from ..config import get_settings

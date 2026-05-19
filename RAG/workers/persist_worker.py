@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import argparse
 import json
@@ -8,7 +8,12 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-from ..memory.redis_memory import ack_qa_turn_event, ensure_events_group, get_redis_client, read_qa_turn_events
+from ..memory.redis_memory import (
+    ack_qa_turn_event,
+    ensure_events_group,
+    get_redis_client,
+    read_qa_turn_events,
+)
 from ..observability import bind_trace_id, configure_logging
 from ..storage import record_chat_turn
 from .reliability import (
@@ -89,7 +94,9 @@ class PersistWorker:
             return str(payload["idempotency_key"])
         strong_key = f"{payload.get('session_id')}|{payload.get('user_message_id')}|{payload.get('assistant_message_id')}"
         if payload.get("user_message_id") and payload.get("assistant_message_id"):
-            return compute_idempotency_key("qa_turn", {"message_pair": strong_key}, fallback=strong_key)
+            return compute_idempotency_key(
+                "qa_turn", {"message_pair": strong_key}, fallback=strong_key
+            )
         return compute_idempotency_key(
             "qa_turn",
             {
@@ -100,13 +107,19 @@ class PersistWorker:
             fallback=payload.get("session_id") or "unknown",
         )
 
-    def _process_payload(self, event_id: Any, payload: dict[str, Any], ack_direct: bool = False) -> int:
+    def _process_payload(
+        self, event_id: Any, payload: dict[str, Any], ack_direct: bool = False
+    ) -> int:
         stream_key = self.stream_key or os.getenv("REDIS_EVENTS_STREAM", "rag:events")
         event_id_text = _event_id_to_text(event_id)
 
         if payload.get("event_type") != "qa_turn":
             if ack_direct:
-                get_redis_client().xack(stream_key, self.group_name or os.getenv("REDIS_EVENTS_GROUP", "rag-persist-workers"), event_id)
+                get_redis_client().xack(
+                    stream_key,
+                    self.group_name or os.getenv("REDIS_EVENTS_GROUP", "rag-persist-workers"),
+                    event_id,
+                )
             else:
                 ack_qa_turn_event(event_id, stream_key=self.stream_key, group_name=self.group_name)
             return 0
@@ -114,7 +127,11 @@ class PersistWorker:
         session_id = payload.get("session_id")
         if not session_id:
             if ack_direct:
-                get_redis_client().xack(stream_key, self.group_name or os.getenv("REDIS_EVENTS_GROUP", "rag-persist-workers"), event_id)
+                get_redis_client().xack(
+                    stream_key,
+                    self.group_name or os.getenv("REDIS_EVENTS_GROUP", "rag-persist-workers"),
+                    event_id,
+                )
             else:
                 ack_qa_turn_event(event_id, stream_key=self.stream_key, group_name=self.group_name)
             return 0
@@ -123,13 +140,21 @@ class PersistWorker:
         idem_key = self._calc_idempotency_key(payload)
         if is_already_processed(idem_key):
             if ack_direct:
-                get_redis_client().xack(stream_key, self.group_name or os.getenv("REDIS_EVENTS_GROUP", "rag-persist-workers"), event_id)
+                get_redis_client().xack(
+                    stream_key,
+                    self.group_name or os.getenv("REDIS_EVENTS_GROUP", "rag-persist-workers"),
+                    event_id,
+                )
             else:
                 ack_qa_turn_event(event_id, stream_key=self.stream_key, group_name=self.group_name)
             clear_retry(stream_key, event_id_text)
             LOGGER.info(
                 "qa_event_duplicate_skipped",
-                extra={"event": "qa_event_duplicate_skipped", "event_id": event_id_text, "session_id": session_id},
+                extra={
+                    "event": "qa_event_duplicate_skipped",
+                    "event_id": event_id_text,
+                    "session_id": session_id,
+                },
             )
             return 0
 
@@ -164,12 +189,22 @@ class PersistWorker:
                 mark_processed(idem_key, event_id_text, ttl_seconds=self.idempotency_ttl_seconds)
                 clear_retry(stream_key, event_id_text)
                 if ack_direct:
-                    get_redis_client().xack(stream_key, self.group_name or os.getenv("REDIS_EVENTS_GROUP", "rag-persist-workers"), event_id)
+                    get_redis_client().xack(
+                        stream_key,
+                        self.group_name or os.getenv("REDIS_EVENTS_GROUP", "rag-persist-workers"),
+                        event_id,
+                    )
                 else:
-                    ack_qa_turn_event(event_id, stream_key=self.stream_key, group_name=self.group_name)
+                    ack_qa_turn_event(
+                        event_id, stream_key=self.stream_key, group_name=self.group_name
+                    )
                 LOGGER.info(
                     "qa_event_persisted",
-                    extra={"event": "qa_event_persisted", "event_id": event_id_text, "session_id": session_id},
+                    extra={
+                        "event": "qa_event_persisted",
+                        "event_id": event_id_text,
+                        "session_id": session_id,
+                    },
                 )
                 return 1
             except Exception as exc:
@@ -186,9 +221,16 @@ class PersistWorker:
                         trace_id=bound_trace,
                     )
                     if ack_direct:
-                        get_redis_client().xack(stream_key, self.group_name or os.getenv("REDIS_EVENTS_GROUP", "rag-persist-workers"), event_id)
+                        get_redis_client().xack(
+                            stream_key,
+                            self.group_name
+                            or os.getenv("REDIS_EVENTS_GROUP", "rag-persist-workers"),
+                            event_id,
+                        )
                     else:
-                        ack_qa_turn_event(event_id, stream_key=self.stream_key, group_name=self.group_name)
+                        ack_qa_turn_event(
+                            event_id, stream_key=self.stream_key, group_name=self.group_name
+                        )
                     clear_retry(stream_key, event_id_text)
                     LOGGER.exception(
                         "qa_event_dead_lettered",
@@ -241,7 +283,9 @@ class PersistWorker:
         client = get_redis_client()
         key = self.stream_key or os.getenv("REDIS_EVENTS_STREAM", "rag:events")
         group = self.group_name or os.getenv("REDIS_EVENTS_GROUP", "rag-persist-workers")
-        consumer = self.consumer_name or os.getenv("REDIS_EVENTS_CONSUMER", f"consumer-{os.getpid()}")
+        consumer = self.consumer_name or os.getenv(
+            "REDIS_EVENTS_CONSUMER", f"consumer-{os.getpid()}"
+        )
         ensure_events_group(stream_key=key, group_name=group)
         try:
             result = client.xautoclaim(
@@ -289,11 +333,20 @@ def consume_forever(poll_interval: float = 1.0, batch_size: int = 10) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Consume Redis QA events and persist them into MySQL")
+    parser = argparse.ArgumentParser(
+        description="Consume Redis QA events and persist them into MySQL"
+    )
     parser.add_argument("--once", action="store_true", help="Process one batch and exit")
     parser.add_argument("--batch-size", type=int, default=10, help="Redis stream batch size")
-    parser.add_argument("--claim-min-idle-ms", type=int, default=60_000, help="Minimum idle ms before claiming pending messages")
-    parser.add_argument("--poll-interval", type=float, default=1.0, help="Polling interval in seconds")
+    parser.add_argument(
+        "--claim-min-idle-ms",
+        type=int,
+        default=60_000,
+        help="Minimum idle ms before claiming pending messages",
+    )
+    parser.add_argument(
+        "--poll-interval", type=float, default=1.0, help="Polling interval in seconds"
+    )
     parser.add_argument("--stream-key", default=None, help="Redis stream key for QA events")
     parser.add_argument("--group-name", default=None, help="Redis consumer group name")
     parser.add_argument("--consumer-name", default=None, help="Redis consumer name")

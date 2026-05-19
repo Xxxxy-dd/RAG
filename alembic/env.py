@@ -8,8 +8,9 @@ from pathlib import Path
 try:
     # Load .env from project root so alembic can read DATABASE_URL / MYSQL_* vars
     from dotenv import load_dotenv
+
     project_root = Path(__file__).resolve().parents[1]
-    dotenv_path = project_root / '.env'
+    dotenv_path = project_root / ".env"
     if dotenv_path.exists():
         load_dotenv(dotenv_path=str(dotenv_path))
 except Exception:
@@ -19,7 +20,7 @@ except Exception:
 from alembic import context
 
 # ensure project root is on path so we can import rag.storage
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
@@ -69,7 +70,9 @@ def get_database_url() -> str:
     if host and user and database:
         host_part = f":{port}" if port else ""
         return f"mysql+pymysql://{user}:{password}@{host}{host_part}/{database}"
-    raise RuntimeError("No database URL configured for alembic; set DATABASE_URL or MYSQL_* env vars")
+    raise RuntimeError(
+        "No database URL configured for alembic; set DATABASE_URL or MYSQL_* env vars"
+    )
 
 
 def run_migrations_offline() -> None:

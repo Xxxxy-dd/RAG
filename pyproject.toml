@@ -1,7 +1,22 @@
 [tool.ruff]
 line-length = 100
+extend-exclude = [
+    "frontend/node_modules",
+    "frontend/dist",
+]
+
+[tool.ruff.lint]
 select = ["E", "F", "W", "C90", "N"]
 extend-ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/*.py" = ["E402"]
+"rag/api/service.py" = ["C901"]
+"rag/loaders/docx_loader.py" = ["C901"]
+"rag/loaders/html_loader.py" = ["C901"]
+"rag/loaders/pdf_loader.py" = ["C901"]
+"rag/loaders/pptx_loader.py" = ["C901"]
+"rag/workers/persist_worker.py" = ["C901"]
 
 [tool.mypy]
 python_version = "3.11"

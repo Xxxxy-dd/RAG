@@ -37,38 +37,51 @@ def _format_metadata(metadata: object) -> str:
     if metadata is None:
         return "{}"
     if isinstance(metadata, dict):
-        parts = [f"{html.escape(str(key))}: {html.escape(_truncate(value, 120))}" for key, value in metadata.items()]
+        parts = [
+            f"{html.escape(str(key))}: {html.escape(_truncate(value, 120))}"
+            for key, value in metadata.items()
+        ]
         return "<br>".join(parts) if parts else "{}"
     return html.escape(_truncate(metadata, 200))
 
 
 def _format_chunk_info(metadata: object) -> str:
-  if not isinstance(metadata, dict):
-    return "<span class='muted'>无</span>"
+    if not isinstance(metadata, dict):
+        return "<span class='muted'>无</span>"
 
-  parts: list[str] = []
+    parts: list[str] = []
 
-  chunk_id = metadata.get("chunk_id")
-  if chunk_id is not None:
-    parts.append(f"<span class='pill'>chunk_id: {html.escape(_truncate(chunk_id, 32))}</span>")
+    chunk_id = metadata.get("chunk_id")
+    if chunk_id is not None:
+        parts.append(f"<span class='pill'>chunk_id: {html.escape(_truncate(chunk_id, 32))}</span>")
 
-  merged_chunk_count = metadata.get("merged_chunk_count")
-  if merged_chunk_count is not None:
-    parts.append(f"<span class='pill'>merged: {html.escape(_truncate(merged_chunk_count, 32))}</span>")
+    merged_chunk_count = metadata.get("merged_chunk_count")
+    if merged_chunk_count is not None:
+        parts.append(
+            f"<span class='pill'>merged: {html.escape(_truncate(merged_chunk_count, 32))}</span>"
+        )
 
-  content_type = metadata.get("content_type")
-  if content_type:
-    parts.append(f"<span class='pill'>type: {html.escape(_truncate(content_type, 32))}</span>")
+    content_type = metadata.get("content_type")
+    if content_type:
+        parts.append(f"<span class='pill'>type: {html.escape(_truncate(content_type, 32))}</span>")
 
-  title_path = metadata.get("title_path")
-  if title_path:
-    parts.append(f"<div class='chunk-detail'>title_path: {html.escape(_truncate(title_path, 140))}</div>")
+    title_path = metadata.get("title_path")
+    if title_path:
+        parts.append(
+            f"<div class='chunk-detail'>title_path: {html.escape(_truncate(title_path, 140))}</div>"
+        )
 
-  source = metadata.get("source")
-  if source:
-    parts.append(f"<div class='chunk-detail'>source: {html.escape(_truncate(source, 180))}</div>")
+    source = metadata.get("source")
+    if source:
+        parts.append(
+            f"<div class='chunk-detail'>source: {html.escape(_truncate(source, 180))}</div>"
+        )
 
-  return "<div class='chunk-info'>" + "".join(parts) + "</div>" if parts else "<span class='muted'>无</span>"
+    return (
+        "<div class='chunk-info'>" + "".join(parts) + "</div>"
+        if parts
+        else "<span class='muted'>无</span>"
+    )
 
 
 def _safe_int(value: str | None, default: int) -> int:
@@ -156,7 +169,7 @@ def _render_page(
         rows_html.append(
             "<tr>"
             f"<td class='mono'>{html.escape(_truncate(row['id'], 100))}</td>"
-        f"<td class='chunk'>{_format_chunk_info(row['metadata'])}</td>"
+            f"<td class='chunk'>{_format_chunk_info(row['metadata'])}</td>"
             f"<td class='doc'>{html.escape(_truncate(row['document'], 900)).replace(chr(10), '<br>')}</td>"
             f"<td class='meta'>{_format_metadata(row['metadata'])}</td>"
             "</tr>"
@@ -164,7 +177,7 @@ def _render_page(
 
     if not rows_html:
         rows_html.append(
-        "<tr><td colspan='4' class='empty'>没有匹配到记录，或者集合为空。</td></tr>"
+            "<tr><td colspan='4' class='empty'>没有匹配到记录，或者集合为空。</td></tr>"
         )
 
     notice_html = ""
@@ -343,7 +356,7 @@ def _render_page(
       <form method="get">
         <label>
           集合名称
-          <select name="collection">{''.join(collection_options)}</select>
+          <select name="collection">{"".join(collection_options)}</select>
         </label>
         <label>
           预览条数
@@ -374,7 +387,7 @@ def _render_page(
           </tr>
         </thead>
         <tbody>
-          {''.join(rows_html)}
+          {"".join(rows_html)}
         </tbody>
       </table>
     </section>

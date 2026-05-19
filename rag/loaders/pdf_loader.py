@@ -15,7 +15,6 @@
 
 import re
 from collections import Counter, defaultdict
-from pathlib import Path
 from typing import List, Optional
 
 import pdfplumber
@@ -44,7 +43,9 @@ except Exception:
 
 _TOKEN_ENCODER = None
 _PAGE_NUMBER_RE = re.compile(r"^(第\s*\d+\s*页|\d+\s*/\s*\d+|page\s*\d+|\d+)$", re.IGNORECASE)
-_BULLET_RE = re.compile(r"^([\-\*•·]|\d+[\.)]|[一二三四五六七八九十]+[、\.)]|\([一二三四五六七八九十]+\))\s*")
+_BULLET_RE = re.compile(
+    r"^([\-\*•·]|\d+[\.)]|[一二三四五六七八九十]+[、\.)]|\([一二三四五六七八九十]+\))\s*"
+)
 
 
 def _normalize_text(text: str) -> str:
@@ -227,7 +228,17 @@ def _extract_tables_with_camelot(path: str) -> List[Document]:
                 page_no = int(table.page) if hasattr(table, "page") else None
                 text = _markdown_table_from_rows(df.values.tolist())
                 if text:
-                    docs.append(Document(page_content=text, metadata={"source": path, "page_number": page_no or -1, "content_type": "table", "table_index": ti + 1}))
+                    docs.append(
+                        Document(
+                            page_content=text,
+                            metadata={
+                                "source": path,
+                                "page_number": page_no or -1,
+                                "content_type": "table",
+                                "table_index": ti + 1,
+                            },
+                        )
+                    )
             except Exception:
                 continue
     except Exception:
@@ -270,11 +281,13 @@ def _extract_page_title_from_page(page, lines: List[str]) -> str:
             line_sizes = []
             line_texts = {}
             for k, chs in line_map.items():
-                sizes = [c.get("size", 0) for c in chs if c.get("text", '').strip()]
+                sizes = [c.get("size", 0) for c in chs if c.get("text", "").strip()]
                 if not sizes:
                     continue
                 avg_size = sum(sizes) / len(sizes)
-                text = _normalize_text("".join([c.get("text", "") for c in sorted(chs, key=lambda x: x.get("x0", 0))]))
+                text = _normalize_text(
+                    "".join([c.get("text", "") for c in sorted(chs, key=lambda x: x.get("x0", 0))])
+                )
                 if text:
                     line_sizes.append(avg_size)
                     line_texts[k] = (avg_size, text)
@@ -282,7 +295,11 @@ def _extract_page_title_from_page(page, lines: List[str]) -> str:
             if line_sizes:
                 avg_page_size = sum(line_sizes) / len(line_sizes)
                 # 找一个显著大于页面平均字体的候选（比如 > 1.15 倍）
-                candidates = [(k, v) for k, v in line_texts.items() if v[0] > avg_page_size * 1.15 and len(v[1]) <= 120]
+                candidates = [
+                    (k, v)
+                    for k, v in line_texts.items()
+                    if v[0] > avg_page_size * 1.15 and len(v[1]) <= 120
+                ]
                 if candidates:
                     # 选择最靠前（top 小）的候选
                     best = sorted(candidates, key=lambda x: x[0])[0][1][1]
@@ -327,7 +344,9 @@ def _extract_page_body(lines: List[str], title: str) -> str:
     return _normalize_text("\n".join(blocks))
 
 
-def _build_metadata(path: str, page_number: int, title: str, content_type: str, chunk_id: Optional[int] = None):
+def _build_metadata(
+    path: str, page_number: int, title: str, content_type: str, chunk_id: Optional[int] = None
+):
     """给每个块补上来源、页码、标题和内容类型，后面追踪会更清楚。"""
     metadata = {
         "source": path,
@@ -363,7 +382,12 @@ def _merge_adjacent_small_chunks(chunks: List[Document]) -> List[Document]:
         same_page = prev.metadata.get("page_number") == chunk.metadata.get("page_number")
         same_type = prev.metadata.get("content_type") == chunk.metadata.get("content_type")
 
-        if same_page and same_type and _should_merge_small_chunk(chunk.page_content) and _token_length(prev.page_content) < 500:
+        if (
+            same_page
+            and same_type
+            and _should_merge_small_chunk(chunk.page_content)
+            and _token_length(prev.page_content) < 500
+        ):
             prev.page_content = _normalize_text(prev.page_content + "\n" + chunk.page_content)
             prev.metadata["merged_chunk_count"] = prev.metadata.get("merged_chunk_count", 1) + 1
             continue
@@ -393,13 +417,16 @@ def _load_pages_with_plumber(path: str) -> List[Document]:
         header_footer_candidates = Counter()
         for page in pdf.pages:
             text = page.extract_text() or ""
-            lines = [l.strip() for l in text.splitlines() if l.strip()][:3]
-            footer = [l.strip() for l in text.splitlines() if l.strip()][-3:]
-            for l in lines + footer:
-                if l:
-                    header_footer_candidates[l] += 1
+            stripped_lines = [line.strip() for line in text.splitlines() if line.strip()]
+            lines = stripped_lines[:3]
+            footer = stripped_lines[-3:]
+            for line in lines + footer:
+                if line:
+                    header_footer_candidates[line] += 1
 
-        header_footer_set = set([s for s, c in header_footer_candidates.items() if c >= max(2, int(page_count * 0.6))])
+        header_footer_set = set(
+            [s for s, c in header_footer_candidates.items() if c >= max(2, int(page_count * 0.6))]
+        )
 
         for page_number, page in enumerate(pdf.pages, start=1):
             # 先尝试用字体大小来识别标题（更稳健）
@@ -415,7 +442,11 @@ def _load_pages_with_plumber(path: str) -> List[Document]:
             page_text = _normalize_text("\n\n".join(page_parts).strip())
 
             # 如果没有正文但 camelot 在该页识别到表格，则优先保留表格
-            page_tables = [t for t in camelot_tables if t.metadata.get("page_number") == page_number] if camelot_tables else []
+            page_tables = (
+                [t for t in camelot_tables if t.metadata.get("page_number") == page_number]
+                if camelot_tables
+                else []
+            )
             if not page_text and (page.extract_tables() or page_tables):
                 documents.extend(_extract_tables_from_page(page, page_number, path))
                 if page_tables:
@@ -426,12 +457,16 @@ def _load_pages_with_plumber(path: str) -> List[Document]:
                 # 如果文本层为空且可用 OCR，则尝试 OCR
                 if convert_from_path is not None and pytesseract is not None:
                     try:
-                        pil_pages = convert_from_path(path, first_page=page_number, last_page=page_number, dpi=150)
+                        pil_pages = convert_from_path(
+                            path, first_page=page_number, last_page=page_number, dpi=150
+                        )
                         if pil_pages:
                             ocr_text = pytesseract.image_to_string(pil_pages[0], lang="chi_sim+eng")
                             ocr_body = _normalize_text(ocr_text)
                             if ocr_body:
-                                page_text = _normalize_text("\n\n".join([f"## {page_heading}", ocr_body]).strip())
+                                page_text = _normalize_text(
+                                    "\n\n".join([f"## {page_heading}", ocr_body]).strip()
+                                )
                     except Exception:
                         pass
 
@@ -449,10 +484,11 @@ def _load_pages_with_plumber(path: str) -> List[Document]:
 
     return documents
 
+
 def _extract_page_body_from_page(page, lines: List[str], title: str, header_footer_set: set) -> str:
     """基于 layout 的正文抽取：支持页眉页脚过滤、多列检测与合并。"""
     # 先过滤跨页重复的页眉页脚
-    filtered_lines = [l for l in lines if l not in header_footer_set]
+    filtered_lines = [line for line in lines if line not in header_footer_set]
 
     # 如果 page supports words with bbox，则做简单的多列检测
     try:
@@ -464,25 +500,38 @@ def _extract_page_body_from_page(page, lines: List[str], title: str, header_foot
             # 若页面宽度可用，寻找显著的横向空隙，作为列分割
             if page_width and centers:
                 sorted_centers = sorted(centers)
-                gaps = [(sorted_centers[i+1] - sorted_centers[i]) for i in range(len(sorted_centers)-1)]
+                gaps = [
+                    (sorted_centers[i + 1] - sorted_centers[i])
+                    for i in range(len(sorted_centers) - 1)
+                ]
                 if gaps:
                     max_gap = max(gaps)
                     if max_gap > (page_width * 0.25):
                         # 找到间隙位置，按 x 将 words 分成两列
                         gap_index = gaps.index(max_gap)
-                        split_x = (sorted_centers[gap_index] + sorted_centers[gap_index+1]) / 2.0
-                        left_words = [w for w in words if ((float(w.get("x0",0))+float(w.get("x1",0)))/2.0) <= split_x]
-                        right_words = [w for w in words if ((float(w.get("x0",0))+float(w.get("x1",0)))/2.0) > split_x]
+                        split_x = (sorted_centers[gap_index] + sorted_centers[gap_index + 1]) / 2.0
+                        left_words = [
+                            w
+                            for w in words
+                            if ((float(w.get("x0", 0)) + float(w.get("x1", 0))) / 2.0) <= split_x
+                        ]
+                        right_words = [
+                            w
+                            for w in words
+                            if ((float(w.get("x0", 0)) + float(w.get("x1", 0))) / 2.0) > split_x
+                        ]
 
                         def words_to_text(ws):
                             # 按 top、x0 排序
-                            ws_sorted = sorted(ws, key=lambda x: (float(x.get("top",0)), float(x.get("x0",0))))
+                            ws_sorted = sorted(
+                                ws, key=lambda x: (float(x.get("top", 0)), float(x.get("x0", 0)))
+                            )
                             lines_local = []
                             cur_top = None
                             cur_words = []
                             for w in ws_sorted:
-                                t = round(float(w.get("top",0))/3)*3
-                                if cur_top is None or abs(t-cur_top) <= 3:
+                                t = round(float(w.get("top", 0)) / 3) * 3
+                                if cur_top is None or abs(t - cur_top) <= 3:
                                     cur_top = t
                                     cur_words.append(w.get("text", ""))
                                 else:
@@ -499,7 +548,7 @@ def _extract_page_body_from_page(page, lines: List[str], title: str, header_foot
                         combined = _normalize_text("\n".join([left_text, right_text]))
                         # 去掉标题重复
                         if title and combined.startswith(title):
-                            combined = combined[len(title):].strip()
+                            combined = combined[len(title) :].strip()
                         return combined
     except Exception:
         pass
@@ -609,5 +658,3 @@ def auto_split_pdf(path: str):
 def load_pdf(path: str):
     """给外部流程调用的统一入口，直接返回 Markdown 化后的页面文档。"""
     return _load_pages(path)
-
-

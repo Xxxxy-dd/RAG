@@ -20,49 +20,61 @@ LOGGER = logging.getLogger(__name__)
 
 
 def _error_payload(code: str, message: str, details=None, trace_id: str | None = None) -> dict:
-	return {
-		"error": {
-			"code": code,
-			"message": message,
-			"details": details,
-			"trace_id": trace_id,
-		},
-	}
+    return {
+        "error": {
+            "code": code,
+            "message": message,
+            "details": details,
+            "trace_id": trace_id,
+        },
+    }
 
 
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request, exc: StarletteHTTPException):
-	code = "bad_request" if exc.status_code < 500 else "internal_error"
-	message = exc.detail if isinstance(exc.detail, str) else "请求处理失败"
-	trace_id = getattr(request.state, "trace_id", None)
-	return JSONResponse(
-		status_code=exc.status_code,
-		content=_error_payload(code=code, message=message, trace_id=trace_id),
-	)
+    code = "bad_request" if exc.status_code < 500 else "internal_error"
+    message = exc.detail if isinstance(exc.detail, str) else "请求处理失败"
+    trace_id = getattr(request.state, "trace_id", None)
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=_error_payload(code=code, message=message, trace_id=trace_id),
+    )
 
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request, exc: RequestValidationError):
-	trace_id = getattr(request.state, "trace_id", None)
-	return JSONResponse(
-		status_code=422,
-		content=_error_payload(code="validation_error", message="请求参数校验失败", details=exc.errors(), trace_id=trace_id),
-	)
+    trace_id = getattr(request.state, "trace_id", None)
+    return JSONResponse(
+        status_code=422,
+        content=_error_payload(
+            code="validation_error",
+            message="请求参数校验失败",
+            details=exc.errors(),
+            trace_id=trace_id,
+        ),
+    )
 
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request, exc: Exception):
-	trace_id = getattr(request.state, "trace_id", None)
-	LOGGER.exception("Unhandled error on %s %s", request.method, request.url.path, extra={"event": "unhandled_exception"})
-	return JSONResponse(
-		status_code=500,
-		content=_error_payload(code="internal_error", message="RAG 服务暂时不可用", trace_id=trace_id),
-	)
+    trace_id = getattr(request.state, "trace_id", None)
+    LOGGER.exception(
+        "Unhandled error on %s %s",
+        request.method,
+        request.url.path,
+        extra={"event": "unhandled_exception"},
+    )
+    return JSONResponse(
+        status_code=500,
+        content=_error_payload(
+            code="internal_error", message="RAG 服务暂时不可用", trace_id=trace_id
+        ),
+    )
 
 
 @app.get("/")
 def root() -> dict[str, str]:
-	return {"status": "ok", "message": "RAG QA Demo backend is running"}
+    return {"status": "ok", "message": "RAG QA Demo backend is running"}
 
 
 __all__ = ["app"]

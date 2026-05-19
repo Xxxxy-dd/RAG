@@ -11,7 +11,6 @@ PPT 转 Markdown 的核心逻辑：
 """
 
 import re
-from pathlib import Path
 from typing import List
 
 from pptx import Presentation
@@ -20,7 +19,9 @@ from langchain_core.documents import Document
 
 
 _SLIDE_NUMBER_RE = re.compile(r"^(第\s*\d+\s*页|\d+\s*/\s*\d+|page\s*\d+|\d+)$", re.IGNORECASE)
-_BULLET_RE = re.compile(r"^([\-\*•·]|\d+[\.)]|[一二三四五六七八九十]+[、\.)]|\([一二三四五六七八九十]+\))\s*")
+_BULLET_RE = re.compile(
+    r"^([\-\*•·]|\d+[\.)]|[一二三四五六七八九十]+[、\.)]|\([一二三四五六七八九十]+\))\s*"
+)
 _NOISE_WORDS = {"内容", "program", "part", "目录", "agenda", "contents", "thank you", "q&a"}
 
 
@@ -52,10 +53,10 @@ def _is_noise_text(text: str) -> bool:
 
     # 判断是否为固定的模板导航词
     lower_cleaned = cleaned.lower()
-    core_text = re.sub(r'[\d\.\-\*•· ]+', '', lower_cleaned)
+    core_text = re.sub(r"[\d\.\-\*•· ]+", "", lower_cleaned)
     if core_text in _NOISE_WORDS or any(word == lower_cleaned for word in _NOISE_WORDS):
         return True
-        
+
     if re.match(r"^part\s*\d+(\s*[•·\-\*])?$", lower_cleaned):
         return True
 
@@ -112,15 +113,15 @@ def _get_shape_text(shape) -> str:
                 # 剔除单元格内部换行，防止破坏 Markdown 表格结构
                 cell_text = _normalize_text(cell.text).replace("\n", " ")
                 cells.append(cell_text)
-                
+
             # 拼接 Markdown 行
             rows_md.append("| " + " | ".join(cells) + " |")
-            
+
             # 第一行结束后，添加 Markdown 的表头分割线
             if i == 0:
                 separator = "|" + "|".join(["---"] * len(cells)) + "|"
                 rows_md.append(separator)
-                
+
         return "\n".join(rows_md)
 
     if hasattr(shape, "text_frame") and shape.text_frame is not None:
@@ -167,11 +168,11 @@ def load_pptx(path: str) -> List[Document]:
     for slide_index, slide in enumerate(prs.slides, start=1):
         title = _extract_slide_title(slide)
         blocks = []
-        
+
         # 1. 加入 Markdown 级别的标题
         if title:
             blocks.append(f"## {title}")
-            
+
         # 2. 按顺序提取内部所有文本框和表格
         for shape in sorted(slide.shapes, key=_shape_reading_key):
             text = _get_shape_text(shape)
@@ -187,7 +188,7 @@ def load_pptx(path: str) -> List[Document]:
             for line in text.split("\n"):
                 if not _is_noise_text(line) and line.strip() != title:
                     filtered_lines.append(line)
-                    
+
             cleaned_text = "\n".join(filtered_lines).strip()
             if cleaned_text:
                 blocks.append(cleaned_text)
@@ -203,7 +204,7 @@ def load_pptx(path: str) -> List[Document]:
             "slide_index": slide_index,
             "slide_title": title or f"Slide {slide_index}",
         }
-        
+
         docs.append(Document(page_content=md_content, metadata=metadata))
 
     # 后处理：合并过短的导航页。
@@ -220,16 +221,18 @@ def load_pptx(path: str) -> List[Document]:
                 prev_doc = merged_docs[-1]
                 prev_doc.page_content += "\n\n" + doc.page_content
                 # 稍微保留一下跨页信息
-                prev_doc.metadata["merged_slides"] = prev_doc.metadata.get("merged_slides", [prev_doc.metadata["slide_index"]]) + [doc.metadata["slide_index"]]
+                prev_doc.metadata["merged_slides"] = prev_doc.metadata.get(
+                    "merged_slides", [prev_doc.metadata["slide_index"]]
+                ) + [doc.metadata["slide_index"]]
         else:
             # 或者，如果上一个非常短，把它补充到当前的开头（这取决于导航页通常是引导下一页）
             if merged_docs and len(merged_docs[-1].page_content.strip()) < 50:
                 short_doc = merged_docs.pop()
                 doc.page_content = short_doc.page_content + "\n\n" + doc.page_content
-                doc.metadata["merged_slides"] = [short_doc.metadata["slide_index"], doc.metadata["slide_index"]]
+                doc.metadata["merged_slides"] = [
+                    short_doc.metadata["slide_index"],
+                    doc.metadata["slide_index"],
+                ]
             merged_docs.append(doc)
 
     return merged_docs
-
-
-

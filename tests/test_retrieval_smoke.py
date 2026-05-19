@@ -33,7 +33,9 @@ class DummyVectorStore:
 
 def test_retrieval_smoke(monkeypatch) -> None:
     """Verify query rewrite, retrieval, scored retrieval, and reranking without local Chroma state."""
-    rewritten_query = rewrite_query("  How should this captcha be recognized?  ", client=DummyChatClient())
+    rewritten_query = rewrite_query(
+        "  How should this captcha be recognized?  ", client=DummyChatClient()
+    )
     assert rewritten_query == "captcha recognition"
 
     service = RetrieverService(vector_store=DummyVectorStore())

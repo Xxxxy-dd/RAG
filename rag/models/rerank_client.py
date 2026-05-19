@@ -2,7 +2,7 @@ import importlib
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Sequence
 from urllib import error, request
 
 from ..config import get_settings
@@ -83,14 +83,14 @@ class RerankClient:
 
         try:
             module = importlib.import_module("sentence_transformers")
-            CrossEncoder = getattr(module, "CrossEncoder")
+            cross_encoder_cls = getattr(module, "CrossEncoder")
         except ImportError as exc:
             raise RuntimeError("未安装 sentence-transformers，无法执行本地重排") from exc
 
         kwargs: dict[str, object] = {}
         if self.device:
             kwargs["device"] = self.device
-        self._local_model = CrossEncoder(self._resolve_local_model_name(), **kwargs)
+        self._local_model = cross_encoder_cls(self._resolve_local_model_name(), **kwargs)
         return self._local_model
 
     def _local_rerank_scores(self, query: str, documents: Sequence[str]) -> list[float]:

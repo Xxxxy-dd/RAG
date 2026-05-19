@@ -49,7 +49,9 @@ def _fetch_text(url: str, timeout: float) -> tuple[bool, str]:
         return False, str(exc)
 
 
-def _wait_for_check(name: str, url: str, timeout: float, deadline: float, json_health: bool) -> CheckResult:
+def _wait_for_check(
+    name: str, url: str, timeout: float, deadline: float, json_health: bool
+) -> CheckResult:
     last_detail = "not checked"
     while time.monotonic() < deadline:
         ok, detail = _fetch_json(url, timeout) if json_health else _fetch_text(url, timeout)
@@ -64,9 +66,13 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Smoke-check a running RAG stack.")
     parser.add_argument("--backend-url", default="http://127.0.0.1:8000/api/health")
     parser.add_argument("--frontend-url", default="http://127.0.0.1")
-    parser.add_argument("--timeout", type=float, default=3.0, help="Per-request timeout in seconds.")
+    parser.add_argument(
+        "--timeout", type=float, default=3.0, help="Per-request timeout in seconds."
+    )
     parser.add_argument("--wait", type=float, default=30.0, help="Total wait time in seconds.")
-    parser.add_argument("--skip-frontend", action="store_true", help="Only check the backend health endpoint.")
+    parser.add_argument(
+        "--skip-frontend", action="store_true", help="Only check the backend health endpoint."
+    )
     args = parser.parse_args()
 
     deadline = time.monotonic() + args.wait
@@ -74,7 +80,11 @@ def main() -> int:
         _wait_for_check("backend", args.backend_url, args.timeout, deadline, json_health=True),
     ]
     if not args.skip_frontend:
-        checks.append(_wait_for_check("frontend", args.frontend_url, args.timeout, deadline, json_health=False))
+        checks.append(
+            _wait_for_check(
+                "frontend", args.frontend_url, args.timeout, deadline, json_health=False
+            )
+        )
 
     for item in checks:
         status = "PASS" if item.ok else "FAIL"

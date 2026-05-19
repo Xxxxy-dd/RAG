@@ -163,11 +163,7 @@ def _merge_adjacent_small_chunks(chunks: List[Document], config: ChunkingConfig)
         same_source = prev.metadata.get("source") == chunk.metadata.get("source")
         same_path = prev.metadata.get("title_path") == chunk.metadata.get("title_path")
 
-        if (
-            same_source
-            and same_path
-            and _should_merge_small_chunk(chunk.page_content, config)
-        ):
+        if same_source and same_path and _should_merge_small_chunk(chunk.page_content, config):
             prev.page_content = _normalize_text(prev.page_content + "\n" + chunk.page_content)
             prev.metadata["merged_chunk_count"] = prev.metadata.get("merged_chunk_count", 1) + 1
             continue
@@ -177,7 +173,9 @@ def _merge_adjacent_small_chunks(chunks: List[Document], config: ChunkingConfig)
     return merged
 
 
-def split_markdown_documents(documents: List[Document], config: ChunkingConfig | None = None) -> List[Document]:
+def split_markdown_documents(
+    documents: List[Document], config: ChunkingConfig | None = None
+) -> List[Document]:
     """统一切分入口：Markdown 语义切分 + token 切分。"""
     if not documents:
         return []
@@ -238,7 +236,9 @@ def split_markdown_documents(documents: List[Document], config: ChunkingConfig |
                 fine_doc.page_content = _normalize_text(fine_doc.page_content)
                 fine_doc.metadata = fine_doc.metadata or {}
                 fine_doc.metadata["title_path"] = _compose_title_path(fine_doc.metadata)
-                fine_doc.page_content = _prepend_title_context(fine_doc.page_content, fine_doc.metadata)
+                fine_doc.page_content = _prepend_title_context(
+                    fine_doc.page_content, fine_doc.metadata
+                )
                 chunks.append(fine_doc)
 
     chunks = _merge_adjacent_small_chunks(chunks, cfg)
@@ -253,6 +253,8 @@ def split_markdown_documents(documents: List[Document], config: ChunkingConfig |
     return chunks
 
 
-def split_loaded_documents(documents: List[Document], config: ChunkingConfig | None = None) -> List[Document]:
+def split_loaded_documents(
+    documents: List[Document], config: ChunkingConfig | None = None
+) -> List[Document]:
     """别名：语义同 `split_markdown_documents`。"""
     return split_markdown_documents(documents, config=config)

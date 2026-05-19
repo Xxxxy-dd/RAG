@@ -23,6 +23,3 @@ except Exception:
     ingest_files = getattr(pkg, "ingest_files")
 
 __all__ = ["ingest_file", "ingest_files"]
-
-
-    

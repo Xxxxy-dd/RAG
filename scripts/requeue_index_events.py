@@ -4,15 +4,15 @@
 
 注意：请在运行前确认 Redis_URL 环境变量或默认 redis://127.0.0.1:6379/0。脚本会打印处理统计。
 """
+
 from __future__ import annotations
 
 import os
 import sys
-from typing import Iterable
 
 try:
     import redis
-except Exception as exc:
+except Exception:
     print("请先安装 redis: pip install redis")
     raise
 
@@ -62,7 +62,7 @@ def requeue_all(stream_key: str = STREAM_KEY, batch: int = BATCH) -> None:
     print(f"重排完成，总计重入队 {total} 条事件（原件已删除）。")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     try:
         requeue_all()
     except Exception as e:

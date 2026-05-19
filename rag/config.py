@@ -71,5 +71,7 @@ def get_settings() -> Settings:
         rerank_timeout=_int_from_env("RERANK_TIMEOUT", 60),
         rerank_model_path=os.getenv("RERANK_MODEL_PATH"),
         chunk_title_only_max_chars=_int_from_env("CHUNK_TITLE_ONLY_MAX_CHARS", 6),
-        chunk_title_only_allow_punctuation=_bool_from_env("CHUNK_TITLE_ONLY_ALLOW_PUNCTUATION", False),
+        chunk_title_only_allow_punctuation=_bool_from_env(
+            "CHUNK_TITLE_ONLY_ALLOW_PUNCTUATION", False
+        ),
     )

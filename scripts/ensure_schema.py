@@ -2,6 +2,7 @@
 
 This script is intended for local development only. Do NOT run in production.
 """
+
 from rag.storage.mysql import get_mysql_store
 
 store = get_mysql_store()

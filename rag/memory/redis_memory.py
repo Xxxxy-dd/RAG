@@ -17,7 +17,9 @@ def _get_redis_url() -> str:
 
 def get_redis_client():
     if redis is None:
-        raise RuntimeError("redis package not installed; please install 'redis' or set up a fake client for tests")
+        raise RuntimeError(
+            "redis package not installed; please install 'redis' or set up a fake client for tests"
+        )
     return redis.from_url(_get_redis_url())
 
 
@@ -53,7 +55,9 @@ def _index_events_consumer_name() -> str:
     return os.getenv("REDIS_INDEX_EVENTS_CONSUMER", f"index-consumer-{os.getpid()}")
 
 
-def save_message(session_id: str, role: str, text: str, max_len: int = 20, ttl: int = 86400) -> None:
+def save_message(
+    session_id: str, role: str, text: str, max_len: int = 20, ttl: int = 86400
+) -> None:
     """保存一条会话消息（role: user|assistant|system）。"""
     client = get_redis_client()
     key = _history_key(session_id)
@@ -74,11 +78,18 @@ def get_recent_messages(session_id: str, limit: int = 10) -> List[Dict[str, Any]
         try:
             items.append(json.loads(b))
         except Exception:
-            items.append({"role": "unknown", "text": b.decode() if isinstance(b, (bytes, bytearray)) else str(b)})
+            items.append(
+                {
+                    "role": "unknown",
+                    "text": b.decode() if isinstance(b, (bytes, bytearray)) else str(b),
+                }
+            )
     return items
 
 
-def save_retrieval_snapshot(session_id: str, snapshot: List[Dict[str, Any]], ttl: int = 86400) -> None:
+def save_retrieval_snapshot(
+    session_id: str, snapshot: List[Dict[str, Any]], ttl: int = 86400
+) -> None:
     client = get_redis_client()
     key = _retrieval_key(session_id)
     client.set(key, json.dumps(snapshot))
@@ -163,10 +174,14 @@ def read_qa_turn_events(
     group = group_name or _events_group_name()
     consumer = consumer_name or _events_consumer_name()
     ensure_events_group(stream_key=key, group_name=group)
-    return client.xreadgroup(groupname=group, consumername=consumer, streams={key: ">"}, count=count, block=block_ms)
+    return client.xreadgroup(
+        groupname=group, consumername=consumer, streams={key: ">"}, count=count, block=block_ms
+    )
 
 
-def ack_qa_turn_event(event_id: str, stream_key: str | None = None, group_name: str | None = None) -> int:
+def ack_qa_turn_event(
+    event_id: str, stream_key: str | None = None, group_name: str | None = None
+) -> int:
     client = get_redis_client()
     key = stream_key or _events_stream_key()
     group = group_name or _events_group_name()
@@ -226,10 +241,14 @@ def read_index_chunk_events(
     group = group_name or _index_events_group_name()
     consumer = consumer_name or _index_events_consumer_name()
     ensure_index_events_group(stream_key=key, group_name=group)
-    return client.xreadgroup(groupname=group, consumername=consumer, streams={key: ">"}, count=count, block=block_ms)
+    return client.xreadgroup(
+        groupname=group, consumername=consumer, streams={key: ">"}, count=count, block=block_ms
+    )
 
 
-def ack_index_chunk_event(event_id: str, stream_key: str | None = None, group_name: str | None = None) -> int:
+def ack_index_chunk_event(
+    event_id: str, stream_key: str | None = None, group_name: str | None = None
+) -> int:
     client = get_redis_client()
     key = stream_key or _index_events_stream_key()
     group = group_name or _index_events_group_name()

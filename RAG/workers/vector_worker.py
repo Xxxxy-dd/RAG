@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import argparse
 import json
@@ -11,7 +11,12 @@ from typing import Any
 from langchain_core.documents import Document
 
 from ..indexes import DEFAULT_COLLECTION_NAME, DEFAULT_PERSIST_DIRECTORY, load_index
-from ..memory.redis_memory import ack_index_chunk_event, ensure_index_events_group, get_redis_client, read_index_chunk_events
+from ..memory.redis_memory import (
+    ack_index_chunk_event,
+    ensure_index_events_group,
+    get_redis_client,
+    read_index_chunk_events,
+)
 from ..observability import bind_trace_id, configure_logging
 from ..storage import (
     get_mysql_store,
@@ -94,7 +99,9 @@ class VectorWorker:
     def _load_vector_store(self, persist_directory: str | None = None):
         return load_index(
             collection_name=self.collection_name,
-            persist_directory=persist_directory or self.persist_directory or DEFAULT_PERSIST_DIRECTORY,
+            persist_directory=persist_directory
+            or self.persist_directory
+            or DEFAULT_PERSIST_DIRECTORY,
         )
 
     def _persist_to_mysql(
@@ -113,8 +120,12 @@ class VectorWorker:
         document_row = store.save_document(
             document_key=document_key,
             content=document.page_content,
-            source=str(document.metadata.get("source")) if document.metadata.get("source") is not None else None,
-            title_path=str(document.metadata.get("title_path")) if document.metadata.get("title_path") is not None else None,
+            source=str(document.metadata.get("source"))
+            if document.metadata.get("source") is not None
+            else None,
+            title_path=str(document.metadata.get("title_path"))
+            if document.metadata.get("title_path") is not None
+            else None,
             trace_id=trace_id,
             idempotency_key=idempotency_key,
             metadata={
@@ -145,7 +156,9 @@ class VectorWorker:
         except Exception:
             vector_store.update_documents(ids=[vector_id], documents=[document])
 
-    def _process_event(self, event_id: Any, payload: dict[str, Any], vector_store) -> tuple[int, Any]:
+    def _process_event(
+        self, event_id: Any, payload: dict[str, Any], vector_store
+    ) -> tuple[int, Any]:
         stream_key = self.stream_key or "rag:index-events"
         event_id_text = self._event_id_text(event_id)
 
@@ -166,7 +179,11 @@ class VectorWorker:
 
         idem_key = payload.get("idempotency_key") or compute_idempotency_key(
             "index_chunk",
-            {"collection_name": payload["collection_name"], "document_key": document_key, "vector_id": vector_id},
+            {
+                "collection_name": payload["collection_name"],
+                "document_key": document_key,
+                "vector_id": vector_id,
+            },
             fallback=vector_id,
         )
 
@@ -175,7 +192,11 @@ class VectorWorker:
             clear_retry(stream_key, event_id_text)
             LOGGER.info(
                 "index_chunk_duplicate_skipped",
-                extra={"event": "index_chunk_duplicate_skipped", "event_id": event_id_text, "vector_id": vector_id},
+                extra={
+                    "event": "index_chunk_duplicate_skipped",
+                    "event_id": event_id_text,
+                    "vector_id": vector_id,
+                },
             )
             return 0, vector_store
 
@@ -193,10 +214,18 @@ class VectorWorker:
                 if vector_store is None:
                     vector_store = self._load_vector_store(payload.get("persist_directory"))
                 self._upsert_vector(vector_store, document, vector_id)
-                self._persist_to_mysql(document, vector_id, payload.get("embedding_model"), trace_id=trace_id, idempotency_key=idem_key)
+                self._persist_to_mysql(
+                    document,
+                    vector_id,
+                    payload.get("embedding_model"),
+                    trace_id=trace_id,
+                    idempotency_key=idem_key,
+                )
                 mark_processed(idem_key, event_id_text, ttl_seconds=self.idempotency_ttl_seconds)
                 clear_retry(stream_key, event_id_text)
-                ack_index_chunk_event(event_id, stream_key=self.stream_key, group_name=self.group_name)
+                ack_index_chunk_event(
+                    event_id, stream_key=self.stream_key, group_name=self.group_name
+                )
                 LOGGER.info(
                     "index_chunk_upserted",
                     extra={
@@ -225,7 +254,9 @@ class VectorWorker:
                         error=str(exc),
                         trace_id=trace_id,
                     )
-                    ack_index_chunk_event(event_id, stream_key=self.stream_key, group_name=self.group_name)
+                    ack_index_chunk_event(
+                        event_id, stream_key=self.stream_key, group_name=self.group_name
+                    )
                     clear_retry(stream_key, event_id_text)
                     LOGGER.exception(
                         "index_chunk_dead_lettered",
@@ -320,8 +351,14 @@ class VectorWorker:
         return processed + normal_processed
 
 
-def run_once(batch_size: int = 10, collection_name: str = DEFAULT_COLLECTION_NAME, persist_directory: str | None = None) -> int:
-    worker = VectorWorker(batch_size=batch_size, collection_name=collection_name, persist_directory=persist_directory)
+def run_once(
+    batch_size: int = 10,
+    collection_name: str = DEFAULT_COLLECTION_NAME,
+    persist_directory: str | None = None,
+) -> int:
+    worker = VectorWorker(
+        batch_size=batch_size, collection_name=collection_name, persist_directory=persist_directory
+    )
     return worker.process_once()
 
 
@@ -331,7 +368,9 @@ def consume_forever(
     collection_name: str = DEFAULT_COLLECTION_NAME,
     persist_directory: str | None = None,
 ) -> None:
-    worker = VectorWorker(batch_size=batch_size, collection_name=collection_name, persist_directory=persist_directory)
+    worker = VectorWorker(
+        batch_size=batch_size, collection_name=collection_name, persist_directory=persist_directory
+    )
     while True:
         processed = worker.process_once()
         if processed == 0:
@@ -339,11 +378,17 @@ def consume_forever(
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Consume Redis index chunk events and upsert them into Chroma + MySQL")
+    parser = argparse.ArgumentParser(
+        description="Consume Redis index chunk events and upsert them into Chroma + MySQL"
+    )
     parser.add_argument("--once", action="store_true", help="Process one batch and exit")
     parser.add_argument("--batch-size", type=int, default=10, help="Redis stream batch size")
-    parser.add_argument("--poll-interval", type=float, default=1.0, help="Polling interval in seconds")
-    parser.add_argument("--collection-name", default=DEFAULT_COLLECTION_NAME, help="Chroma collection name")
+    parser.add_argument(
+        "--poll-interval", type=float, default=1.0, help="Polling interval in seconds"
+    )
+    parser.add_argument(
+        "--collection-name", default=DEFAULT_COLLECTION_NAME, help="Chroma collection name"
+    )
     parser.add_argument("--persist-directory", default=None, help="Chroma persist directory")
     args = parser.parse_args(argv)
 

@@ -145,7 +145,9 @@ def clear_retry(stream_key: str, event_id: str) -> None:
     client.delete(retry_count_key(stream_key, event_id))
 
 
-def compute_backoff_seconds(attempt: int, base_seconds: float = 1.0, max_seconds: float = 60.0) -> float:
+def compute_backoff_seconds(
+    attempt: int, base_seconds: float = 1.0, max_seconds: float = 60.0
+) -> float:
     if attempt <= 1:
         return base_seconds
     value = base_seconds * (2 ** (attempt - 1))

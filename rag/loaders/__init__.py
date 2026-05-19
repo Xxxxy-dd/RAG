@@ -11,10 +11,10 @@ from .pdf_loader import load_pdf
 from .pptx_loader import load_pptx
 
 __all__ = [
-	"load_pdf",
-	"load_pptx",
-	"load_docx",
-	"load_html",
-	"load_md",
-	"load_markdown",
+    "load_pdf",
+    "load_pptx",
+    "load_docx",
+    "load_html",
+    "load_md",
+    "load_markdown",
 ]

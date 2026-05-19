@@ -70,7 +70,9 @@ def _detect_content_type(text: str) -> str:
 
     list_like_count = 0
     for line in lines:
-        if re.match(r"^([\-\*•·]|\d+[\.)]|[一二三四五六七八九十]+[、\.)]|\([一二三四五六七八九十]+\))", line):
+        if re.match(
+            r"^([\-\*•·]|\d+[\.)]|[一二三四五六七八九十]+[、\.)]|\([一二三四五六七八九十]+\))", line
+        ):
             list_like_count += 1
 
     if list_like_count >= max(2, len(lines) // 2):
@@ -109,7 +111,12 @@ def _get_heading_level(style_name: str, text: str = "", paragraph=None):
     if re.match(r"^（[一二三四五六七八九十]+）\s*\S+", s):
         return 2
 
-    if paragraph is not None and len(s) <= 30 and not s.endswith(("。", "！", "？")) and " " not in s:
+    if (
+        paragraph is not None
+        and len(s) <= 30
+        and not s.endswith(("。", "！", "？"))
+        and " " not in s
+    ):
         if any(run.bold for run in paragraph.runs if run.text.strip()):
             return 3
 
@@ -127,7 +134,6 @@ def _looks_like_heading(paragraph, text: str) -> bool:
 
 def _iter_block_items(parent):
     """按文档中的真实顺序遍历段落和表格。"""
-    from docx.oxml import OxmlElement
 
     if isinstance(parent, _DocxDocumentType):
         parent_elm = parent.element.body
@@ -147,7 +153,9 @@ def _is_list_paragraph(paragraph: Paragraph) -> bool:
     if not text:
         return False
 
-    if re.match(r"^([\-\*•·]|\d+[\.)]|[一二三四五六七八九十]+[、\.)]|\([一二三四五六七八九十]+\))\s*", text):
+    if re.match(
+        r"^([\-\*•·]|\d+[\.)]|[一二三四五六七八九十]+[、\.)]|\([一二三四五六七八九十]+\))\s*", text
+    ):
         return True
 
     style_name = paragraph.style.name if paragraph.style else ""
@@ -170,7 +178,11 @@ def _paragraph_to_markdown(paragraph: Paragraph) -> Tuple[str, str]:
         return f"{'#' * heading_level} {text}", "title"
 
     if _is_list_paragraph(paragraph):
-        text = re.sub(r"^([\-\*•·]|\d+[\.)]|[一二三四五六七八九十]+[、\.)]|\([一二三四五六七八九十]+\))\s*", "- ", text)
+        text = re.sub(
+            r"^([\-\*•·]|\d+[\.)]|[一二三四五六七八九十]+[、\.)]|\([一二三四五六七八九十]+\))\s*",
+            "- ",
+            text,
+        )
         return text, "list"
 
     if getattr(paragraph, "level", 0) and paragraph.level > 0:
@@ -215,7 +227,9 @@ def _table_to_markdown(table: Table) -> str:
     return _markdown_table_from_row_values(rows)
 
 
-def _build_metadata(path: str, title_stack, content_type: str, section_id: int, chunk_id: Optional[int] = None):
+def _build_metadata(
+    path: str, title_stack, content_type: str, section_id: int, chunk_id: Optional[int] = None
+):
     """给每个块补上来源、章节和标题路径，后面检索时更容易追踪。"""
     metadata = {
         "source": path,
@@ -340,5 +354,3 @@ def auto_split_docx(path: str):
 def load_docx(path: str):
     """给外部流程调用的统一入口，直接返回 Markdown 化后的文档。"""
     return _split_docx_into_markdown_documents(path)
-
-

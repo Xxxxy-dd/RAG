@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import sys
 import types
@@ -23,6 +23,7 @@ if "rag.pipeline" not in sys.modules:
 # Provide a lightweight rag.embeddings stub so index-related imports do not
 # require optional community packages during test collection.
 if "rag.embeddings" not in sys.modules:
+
     class _DummyEmbeddings:
         model = "test-embedding-model"
 
@@ -36,10 +37,10 @@ if "rag.embeddings" not in sys.modules:
     # Use in-memory idempotency store for tests to avoid relying on a real Redis
     try:
         from rag.workers import reliability
+
         reliability.use_inmemory_store_for_tests()
     except Exception:
         pass
-
 
     @pytest.fixture(autouse=True)
     def _clear_idempotency_store_between_tests():
