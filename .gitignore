@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+.Python
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Node
+node_modules/
+frontend/node_modules/
+
+# Build / runtime
+dist/
+outputs/
+data/
+rag/indexes/chroma_db/
+
+# IDE
+.vscode/
+.idea/
+.DS_Store

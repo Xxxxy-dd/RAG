@@ -1,0 +1,157 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: rag-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - redis_data:/data
+
+  mysql:
+    image: mysql:8.0
+    container_name: rag-mysql
+    restart: unless-stopped
+    command: ["--default-authentication-plugin=mysql_native_password"]
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: rag
+      MYSQL_USER: rag
+      MYSQL_PASSWORD: ragpass
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-docker.m.daocloud.io/library/python:3.11-slim}
+    container_name: rag-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PYTHONPATH: /app
+      REDIS_URL: redis://redis:6379/0
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USER: rag
+      MYSQL_PASSWORD: ragpass
+      MYSQL_DATABASE: rag
+      MYSQL_CHARSET: utf8mb4
+      REDIS_EVENTS_STREAM: rag:events
+      REDIS_EVENTS_GROUP: rag-persist-workers
+      REDIS_INDEX_EVENTS_STREAM: rag:index-events
+      REDIS_INDEX_EVENTS_GROUP: rag-index-workers
+    depends_on:
+      redis:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+    command: ["uvicorn", "rag.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./:/app
+      - chroma_data:/app/rag/indexes/chroma_db
+
+  persist_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-docker.m.daocloud.io/library/python:3.11-slim}
+    container_name: rag-persist-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PYTHONPATH: /app
+      REDIS_URL: redis://redis:6379/0
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USER: rag
+      MYSQL_PASSWORD: ragpass
+      MYSQL_DATABASE: rag
+      MYSQL_CHARSET: utf8mb4
+      REDIS_EVENTS_STREAM: rag:events
+      REDIS_EVENTS_GROUP: rag-persist-workers
+      REDIS_EVENTS_CONSUMER: persist-worker-1
+    depends_on:
+      redis:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+    command: ["python", "-m", "rag.workers.persist_worker"]
+    volumes:
+      - ./:/app
+
+  vector_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-docker.m.daocloud.io/library/python:3.11-slim}
+    container_name: rag-vector-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PYTHONPATH: /app
+      REDIS_URL: redis://redis:6379/0
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USER: rag
+      MYSQL_PASSWORD: ragpass
+      MYSQL_DATABASE: rag
+      MYSQL_CHARSET: utf8mb4
+      REDIS_INDEX_EVENTS_STREAM: rag:index-events
+      REDIS_INDEX_EVENTS_GROUP: rag-index-workers
+      REDIS_INDEX_EVENTS_CONSUMER: vector-worker-1
+    depends_on:
+      redis:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    command: ["python", "-m", "rag.workers.vector_worker"]
+    volumes:
+      - ./:/app
+      - chroma_data:/app/rag/indexes/chroma_db
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        NODE_BASE_IMAGE: ${NODE_BASE_IMAGE:-docker.m.daocloud.io/library/node:20-alpine}
+    container_name: rag-frontend
+    restart: unless-stopped
+    environment:
+      VITE_PROXY_TARGET: http://backend:8000
+      VITE_DEV_HOST: 0.0.0.0
+      VITE_DEV_PORT: 5173
+    depends_on:
+      backend:
+        condition: service_started
+    ports:
+      - "5173:5173"
+
+volumes:
+  redis_data:
+  mysql_data:
+  chroma_data:

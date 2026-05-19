@@ -1,0 +1,9 @@
+[tool.ruff]
+line-length = 100
+select = ["E", "F", "W", "C90", "N"]
+extend-ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+strict = false
